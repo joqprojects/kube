@@ -1,0 +1,9 @@
+{specification, log}.
+{description, "Josca file for log" }.
+{vsn, "1.0.0" }.
+{exported_services,[{"log","1.0.0"}]}.
+{num_instances,2}.
+{zone,["master"]}.
+{geo_red,[]}.
+{needed_capabilities,[]}.
+{dependencies ,[]}.

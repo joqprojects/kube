@@ -1,0 +1,20 @@
+key value store
+create,update,read,delete
+
+Tar file:
+key={tar_file,Service_id,Vsn}
+value=[{tarfile,tarfilename,file.tar},{josca,file.josca},{app,file.app}]
+
+search:
+key={ServiceId,Vsn}
+Value={tar_file,Service_id,Vsn}
+
+key=ServiceId
+Value=[{tar_file,Service_id,Vsn1},{tar_file,Service_id,Vsn2}
+
+key={josca,Service_id,Vsn}
+Value=file.josca
+
+
+key=
+{servic_id
