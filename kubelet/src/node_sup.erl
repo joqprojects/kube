@@ -4,7 +4,7 @@
 %%%
 %%% Created : 10 dec 2012
 %%% -------------------------------------------------------------------
--module(dns_sup).
+-module(nfvi_sup).
 
 -behaviour(supervisor).
 %% --------------------------------------------------------------------
@@ -14,7 +14,7 @@
 %% --------------------------------------------------------------------
 %% External exports
 %% --------------------------------------------------------------------
--export([start_link/0]).
+-export([start_link/1]).
 
 %% --------------------------------------------------------------------
 %% Internal exports
@@ -28,7 +28,7 @@
 %% --------------------------------------------------------------------
 -define(SERVER, ?MODULE).
 %% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), {I, {I, start, []}, permanent, 5000, Type, [I]}).
+-define(CHILD(I, Type, Args), {I, {I, start, [Args]}, permanent, 5000, Type, [I]}).
 %% --------------------------------------------------------------------
 %% Records
 %% --------------------------------------------------------------------
@@ -37,8 +37,8 @@
 %% External functions
 %% ====================================================================
 
-start_link()->
-   supervisor:start_link({local,?MODULE}, ?MODULE,[]).
+start_link(InitArgs)->
+   supervisor:start_link({local,?MODULE}, ?MODULE,[InitArgs]).
 
 %% ====================================================================
 %% Server functions
@@ -49,9 +49,9 @@ start_link()->
 %%          ignore                          |
 %%          {error, Reason}
 %% --------------------------------------------------------------------
-init([]) ->
+init([InitArgs]) ->
     {ok,{{one_for_one,5,10}, 
-	 [?CHILD(dns,worker)]}}.
+	 [?CHILD(nfvi,worker,InitArgs)]}}.
 
 %% ====================================================================
 %% Internal functions

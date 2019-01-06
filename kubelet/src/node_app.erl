@@ -1,7 +1,7 @@
 %% Author: uabjle
 %% Created: 10 dec 2012
 %% Description: TODO: Add description to application_org
--module(dns_app).
+-module(nfvi_app).
 
 -behaviour(application).
 %% --------------------------------------------------------------------
@@ -42,9 +42,17 @@
 %% Returns: {ok, Pid}        |
 %%          {ok, Pid, State} |
 %%          {error, Reason}
-%% --------------------------------------------------------------------
+%% -------------------------------------------------------------------
 start(_Type, _StartArgs) ->
-    {ok,Pid}= dns_sup:start_link(),
+    {ok,PublicIp}=application:get_env(public_ip),
+    {ok,PublicPort}=application:get_env(public_port),
+    {ok,LocalIp}=application:get_env(local_ip),
+    {ok,LocalPort}=application:get_env(local_port),
+    {ok,Service}=application:get_env(service),
+    {ok,Vsn}=application:get_env(vsn),
+    InitArgs=addr_mgr:update_init_args(PublicIp,PublicPort,LocalIp,LocalPort,Service,Vsn),
+
+    {ok,Pid}= nfvi_sup:start_link(InitArgs),
     {ok,Pid}.
 %% --------------------------------------------------------------------
 %% Func: stop/1

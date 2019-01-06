@@ -4,9 +4,8 @@
 %%%
 %%% Created : 10 dec 2012
 %%% -------------------------------------------------------------------
--module(dns_sup).
+-module(nfvi_boot).
 
--behaviour(supervisor).
 %% --------------------------------------------------------------------
 %% Include files
 %% --------------------------------------------------------------------
@@ -14,21 +13,14 @@
 %% --------------------------------------------------------------------
 %% External exports
 %% --------------------------------------------------------------------
--export([start_link/0]).
-
-%% --------------------------------------------------------------------
-%% Internal exports
-%% --------------------------------------------------------------------
 -export([
-	 init/1
+	 boot/0
         ]).
 
 %% --------------------------------------------------------------------
 %% Macros
 %% --------------------------------------------------------------------
--define(SERVER, ?MODULE).
-%% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), {I, {I, start, []}, permanent, 5000, Type, [I]}).
+
 %% --------------------------------------------------------------------
 %% Records
 %% --------------------------------------------------------------------
@@ -36,9 +28,26 @@
 %% ====================================================================
 %% External functions
 %% ====================================================================
-
-start_link()->
-   supervisor:start_link({local,?MODULE}, ?MODULE,[]).
+boot()->
+    case application:start(nfvi) of
+	ok->
+	    case rpc:call(node(),nfvi_boot,boot,[]) of
+		{badrpc,_Err}->
+	                % call log with err msg
+		    timer:sleep(10*60*1000),
+		    nfvi_boot:boot();
+		ok->
+		    InitArgs=create_init_args(),
+		    nfvi:init_service(InitArgs)
+	    end;
+	{error,{already_started,nfvi}} ->
+	    ok;
+	 {error,_Err}->
+	    % call log with err msg
+	    timer:sleep(10*60*1000),
+	    nfvi_boot:boot()
+    end.
+	    
 
 %% ====================================================================
 %% Server functions
@@ -49,11 +58,17 @@ start_link()->
 %%          ignore                          |
 %%          {error, Reason}
 %% --------------------------------------------------------------------
-init([]) ->
-    {ok,{{one_for_one,5,10}, 
-	 [?CHILD(dns,worker)]}}.
+
 
 %% ====================================================================
 %% Internal functions
 %% ====================================================================
-
+create_init_args()->
+    {ok,L}=file:consult("nfvi.config"),
+    {init_args,L2}=lists:keyfind(init_args,1,L),
+    {public_ip,NfviIp}=lists:keyfind(public_ip,1,L2),
+    {public_port,NfviPort}=lists:keyfind(public_port,1,L2),
+    {service_id,ServiceId}=lists:keyfind(service_id,1,L2),
+    {vsn,Vsn}=lists:keyfind(vsn,1,L2),
+    InitArgs=addr_mgr:update_init_args(NfviIp,NfviPort,ServiceId,Vsn),
+    InitArgs.

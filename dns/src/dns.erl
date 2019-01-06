@@ -1,12 +1,5 @@
 %%% -------------------------------------------------------------------
 %%% Author  : Joq Erlang
-%%% Description : 
-%%%   Simple service discovery built as with dns functionality
-%%%
-%%% Data model:
-%%%  PublicIpAddr, PublicPort,  % Address to loadbalancer in DMZ  
-%%%  LocalIpAddr,LocalPort      % Local lan adress ex 192.168.0.120 . 1000
-%%%  ServiceId, Vsn             % "load_balancer","1.0.0", "brd_mgr","1.0.0", "tellstick",2.3.4"
 %%%  
 %%% Created : 10 dec 2012
 %%% -------------------------------------------------------------------
@@ -20,6 +13,7 @@
 -include("kube/include/tcp.hrl").
 -include("kube/include/dns.hrl").
 -include("kube/include/data.hrl").
+-include("kube/include/dns_data.hrl").
 %% --------------------------------------------------------------------
 %% Include files
 %% --------------------------------------------------------------------
@@ -29,7 +23,7 @@
 %% Key Data structures
 %% 
 %% --------------------------------------------------------------------
-
+-record(state,{dns_info,dns_list}).
 
 %% --------------------------------------------------------------------
 %% Exported functions
@@ -38,43 +32,27 @@
 %% dns functions 
 -export([get_instances/2,get_instances/1,
 	 get_all_instances/0,
-	 register/1,
-	 de_register/1,
+	 dns_register/1,
+	 de_dns_register/1,
 	 heart_beat/0
 	]
       ).
 
 
--export([start/1,
-	 stop/0,
-	 app_start/6
+-export([start/0,
+	 stop/0
 	]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--record(state,
-	{
-	  init_args,
-	  dns_list
-	}).
 %% ====================================================================
 %% External functions
 %% ====================================================================
-app_start(PublicIp,PublicPort,LocalIp,LocalPort,Service,Vsn)->
-    ok=application:set_env(?MODULE,public_ip,PublicIp),
-    ok=application:set_env(?MODULE,public_port,PublicPort),
-    ok=application:set_env(?MODULE,local_ip,LocalIp),
-    ok=application:set_env(?MODULE,local_port,LocalPort),
-    ok=application:set_env(?MODULE,service,Service),
-    ok=application:set_env(?MODULE,vsn,Vsn),
-    R1=application:load(?MODULE),
-    R2=application:start(?MODULE),
-    {R1,R2}.
 
 %% Gen server functions
 
-start(InitArgs)-> gen_server:start_link({local, ?MODULE}, ?MODULE, [InitArgs], []).
+start()-> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 stop()-> gen_server:call(?MODULE, {stop},infinity).
 
@@ -97,11 +75,11 @@ heart_beat()->
     gen_server:call(?MODULE, {heart_beat},infinity).
 %%-----------------------------------------------------------------------
 
-register(InitArgs)->
-    gen_server:cast(?MODULE, {register,InitArgs}).  
+dns_register(DnsInfo)->
+    gen_server:cast(?MODULE, {dns_register,DnsInfo}).  
 
-de_register(InitArgs)->  
-    gen_server:cast(?MODULE, {de_register,InitArgs}). 
+de_dns_register(DnsInfo)->  
+    gen_server:cast(?MODULE, {de_dns_register,DnsInfo}). 
 
 %% ====================================================================
 %% Server functions
@@ -116,12 +94,22 @@ de_register(InitArgs)->
 %%          {stop, Reason}
 %
 %% --------------------------------------------------------------------
-init([InitArgs]) ->
-    ServicePort=addr_mgr:init_args_local_port(InitArgs),
-    {ok, LSock}=gen_tcp:listen(ServicePort,?SERVER_SETUP),
-    spawn(fun()-> tcp:par_connect(LSock) end),
+init([]) ->
+    % Kubelete sets the env variables when starting the application!
+    % Updates when changed
+    % Glurk ta bort app_start
+    {ok,MyIp}=application:get_env(ip_addr),
+    {ok,Port}=application:get_env(port),
+    {ok,ServiceId}=application:get_env(service_id),
+    {ok,Vsn}=application:get_env(vsn),
+    MyDnsInfo=#dns_info{time_stamp="not_initiaded_time_stamp",
+			service_id = ServiceId,
+			vsn = Vsn,
+			ip_addr=MyIp,
+			port=Port
+		       },
     spawn(fun()-> local_heart_beat(?HEARTBEAT_INTERVAL) end), 
-    {ok, #state{dns_list=[]}}.
+    {ok, #state{dns_info=MyDnsInfo,dns_list=[]}}.
     
 %% --------------------------------------------------------------------
 %% Function: handle_call/3
@@ -135,8 +123,7 @@ init([InitArgs]) ->
 %% --------------------------------------------------------------------
 
 handle_call({get_all_instances},_From, State) ->
-    DnsList=State#state.dns_list,
-    Reply=dns_lib:get_all_instances(DnsList),
+    Reply=State#state.dns_list,
     {reply, Reply, State};
 
 
@@ -151,8 +138,8 @@ handle_call({get_instances,WantedServiceStr,WantedVsnStr},_From, State) ->
 handle_call({heart_beat}, _From, State) ->
     DnsList=State#state.dns_list,
     Now=erlang:now(),
-    NewDnsList=[{TimeStamp,InitArgs}||{TimeStamp,InitArgs}<-DnsList,
-		      (timer:now_diff(Now,TimeStamp)/1000)<?INACITIVITY_TIMEOUT],
+    NewDnsList=[DnsInfo||DnsInfo<-DnsList,
+		      (timer:now_diff(Now,DnsInfo#dns_info.time_stamp)/1000)<?INACITIVITY_TIMEOUT],
     NewState=State#state{dns_list=NewDnsList},
     Reply=ok,
    {reply, Reply, NewState};
@@ -161,9 +148,9 @@ handle_call({stop}, _From, State) ->
     {stop, normal, shutdown_ok, State};
 
 handle_call(Request, From, State) ->
-    InitArgs=State#state.init_args,
+    DnsInfo=State#state.dns_info,
     DnsList=State#state.dns_list,
-    dns_lib:local_log_call(InitArgs,error,[?MODULE,?LINE,'unmatched_signal',Request,From],DnsList),	
+    dns_lib:local_log_call(DnsInfo,error,[?MODULE,?LINE,'unmatched_signal',Request,From],DnsList),	
     Reply = {unmatched_signal,?MODULE,Request,From},
     {reply, Reply, State}.
 
@@ -175,24 +162,25 @@ handle_call(Request, From, State) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
 
-handle_cast({register,InitArgs}, State) ->
-   % io:format("~p~n",[{?MODULE,?LINE,register,InitArgs}]),
+handle_cast({dns_register,DnsInfo}, State) ->
+  %  io:format("~p~n",[{?MODULE,?LINE,register,DnsInfo}]),
     DnsList=State#state.dns_list,
-    NewDnsList=dns_lib:register(InitArgs,DnsList),
+    NewDnsList=dns_lib:dns_register(DnsInfo,DnsList),
     NewState=State#state{dns_list=NewDnsList},
+  %  io:format("~p~n",[{?MODULE,?LINE,register,NewState}]),
     {noreply, NewState};
 
-handle_cast({de_register,InitArgs}, State) ->
+handle_cast({de_dns_register,DnsInfo}, State) ->
 %    io:format("~p~n",[{?MODULE,?LINE,de_register,InitArgs}]),
     DnsList=State#state.dns_list,
-    NewDnsList=dns_lib:de_register(InitArgs,DnsList),
+    NewDnsList=dns_lib:de_dns_register(DnsInfo,DnsList),
     NewState=State#state{dns_list=NewDnsList},
     {noreply, NewState};
 
 handle_cast(Msg, State) ->
-    InitArgs=State#state.init_args,
+    DnsInfo=State#state.dns_info,
     DnsList=State#state.dns_list,
-    dns_lib:local_log_call(InitArgs,error,[?MODULE,?LINE,'unmatched_signal',Msg],DnsList),	
+    dns_lib:local_log_call(DnsInfo,error,[?MODULE,?LINE,'unmatched_signal',Msg],DnsList),	
     {noreply, State}.
 
 %% --------------------------------------------------------------------

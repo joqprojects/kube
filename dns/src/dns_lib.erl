@@ -12,6 +12,7 @@
 %% Include files
 %% --------------------------------------------------------------------
 -include("kube/include/dns.hrl").
+-include("kube/include/dns_data.hrl").
 -include("kube/include/data.hrl").
 %% --------------------------------------------------------------------
 
@@ -25,34 +26,7 @@
 %% ====================================================================
 %% External functions
 %% ====================================================================
-boot()->
-    dns:app_start(?DNS_PUBLIC_IP,?DNS_PUBLIC_PORT,na,na,"dns","1.0.0").
 
-
-
-
-get_all_instances(DnsList)->
-    [DnsInfo || {_TimeStamp,DnsInfo}<-DnsList].
-
-get_instances(WantedServiceStr,DnsList)->
-    Reply=[{PublicIpAddr,PublicPort,LocalIp,LocalPort} || {_TimeStamp,[{public_ip,PublicIpAddr},{public_port,PublicPort},
-									       {local_ip,LocalIp},{local_port,LocalPort},
-									       {service_id,ServiceIdStr},{vsn,_VsnStr}]
-								  }<-DnsList,
-								  WantedServiceStr==ServiceIdStr
-	  ],
-   % io:format(" get instances ~p~n",[{?MODULE,?LINE,Reply}]),    
-    Reply.
-
-get_instances(WantedServiceStr,WantedVsnStr,DnsList)->
-    Reply=[{PublicIpAddr,PublicPort,LocalIp,LocalPort} || {_TimeStamp,[{public_ip,PublicIpAddr},{public_port,PublicPort},
-									       {local_ip,LocalIp},{local_port,LocalPort},
-									       {service_id,ServiceIdStr},{vsn,VsnStr}]
-								  }<-DnsList,
-								  {WantedServiceStr,WantedVsnStr}=={ServiceIdStr,VsnStr}
-	  ],
-  %  io:format(" get instances ~p~n",[{?MODULE,?LINE,Reply}]), 
-    Reply.
 
 
 %% --------------------------------------------------------------------
@@ -60,62 +34,43 @@ get_instances(WantedServiceStr,WantedVsnStr,DnsList)->
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
-register(InitArgs, DnsList) ->
- %   io:format("~p~n",[{?MODULE,?LINE,InitArgs}]),
-  %  io:format("~p~n",[{?MODULE,?LINE,DnsList}]),
- %  [{public_ip,Ip},{public_port,Port},{service_id,ServiceId},{vsn,Vsn}]
-  
-    Elem=[{TimeStamp,DnsInfoElem}||{TimeStamp,DnsInfoElem}<-DnsList,
-				   InitArgs==DnsInfoElem
-	 ],			   
-    NewDnsList=case Elem of
-		   [] ->
-		       local_log_call(InitArgs,ok,[?MODULE,?LINE,'service registrated',
-						   addr_mgr:init_args_service_id(InitArgs),
-						   addr_mgr:init_args_vsn(InitArgs)
-						  ],
-				      DnsList),
-		       [{erlang:timestamp(),InitArgs}|DnsList];
-			   
-		   [{_,DnsInfoElem}] ->
-		       lists:keyreplace(DnsInfoElem,2,DnsList,{erlang:timestamp(),DnsInfoElem})
-		end,
+dns_register(DnsInfo, DnsList) ->
+    TimeStamp=erlang:timestamp(),
+    NewDnsInfo=DnsInfo#dns_info{time_stamp=TimeStamp},
+    #dns_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn}=DnsInfo,
+    
+    X1=[X||X<-DnsList,false==({IpAddr,Port,ServiceId,Vsn}==
+				  {X#dns_info.ip_addr,X#dns_info.port,X#dns_info.service_id,X#dns_info.vsn})],
+    NewDnsList=[NewDnsInfo|X1],
     NewDnsList.
 
+de_dns_register(DnsInfo,DnsList)->
+    #dns_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn}=DnsInfo,
+    NewDnsList=[X||X<-DnsList,false==({IpAddr,Port,ServiceId,Vsn}==
+				  {X#dns_info.ip_addr,X#dns_info.port,X#dns_info.service_id,X#dns_info.vsn})],
+    NewDnsList.
 
-local_log_call(InitArgs,Type,Info,DnsList)->
-    ServiceId=addr_mgr:init_args_service_id(InitArgs),
-    Vsn=addr_mgr:init_args_vsn(InitArgs),
-    Event=[{public_ip,addr_mgr:init_args_public_ip(InitArgs)},
-	   {public_port,addr_mgr:init_args_public_port(InitArgs)},
-	   {local_ip,addr_mgr:init_args_local_ip(InitArgs)},
-	   {local_port,addr_mgr:init_args_local_port(InitArgs)},
+%% --------------------------------------------------------------------
+%% Function: 
+%% Description:
+%% Returns: non
+%% --------------------------------------------------------------------
+local_log_call(DnsInfo,Type,Info,_DnsList)->
+    ServiceId=DnsInfo#dns_info.service_id,
+    Vsn=DnsInfo#dns_info.vsn,
+    IpAddr=DnsInfo#dns_info.ip_addr,
+    Port=DnsInfo#dns_info.port,	
+    Event=[{ip_addr,IpAddr},
+	   {port,Port},
 	   {service_id,ServiceId},
 	   {vsn,Vsn},
 	   {event_type,Type},
 	   {event_info,Info}
 	  ],
-    case dns_lib:get_instances("log","1.0.0",DnsList) of
-	[{PublicIp,PublicPort,LocalIp,LocalPort}]->
-	    ok=tcp:call(PublicIp,PublicPort,LocalIp,LocalPort,{log,add_event,[Event]});
-	Err ->
-	    io:format("Error ~p~n",[{?MODULE,?LINE,Err}])
-    end.
-
-
-de_register(InitArgs, DnsList)->
-    NewDnsList=[{TimeStamp,DnsInfo}||{TimeStamp,DnsInfo}<-DnsList,
-				      (DnsInfo==InitArgs)==false
-	       ],
-    local_log_call(InitArgs,ok,[?MODULE,?LINE,'service de-registrated',
-						   addr_mgr:init_args_service_id(InitArgs),
-						   addr_mgr:init_args_vsn(InitArgs)],
-		   DnsList),
-    NewDnsList.
-
-%% --------------------------------------------------------------------
-%% Function: 
-%% Description:
-%% Returns: non
-%% --------------------------------------------------------------------
-%filter_events(Key
+    %case dns_lib:get_instances("log","1.0.0",DnsList) of
+%	[{PublicIp,PublicPort,LocalIp,LocalPort}]->
+%	    ok=tcp:call(PublicIp,PublicPort,LocalIp,LocalPort,{log,add_event,[Event]});
+%	Err ->
+%	    io:format("Error ~p~n",[{?MODULE,?LINE,Err}])
+ %   end.
+    Event.

@@ -94,4 +94,9 @@ oam:
 	erl -pa ebin/oam/ebin -s oam_lib boot -sname oam
 test_oam:
 	cp ebin/common/ebin/* test/test_ebin;
-	erl -pa test/test_ebin -sname test_oam
+	erl -pa test/test_ebin -sname test_oam;
+test_dns:
+	rm -rf dns/ebin/* ; 
+	rm -rf kube/*/src/*~ kube/*/test_src/*~ kube/*/*.dump kube/*~ kube/*/*~;
+	rm -rf test/*/nfvi/*.dump  test/*/nfvi/ebin/* test/test_ebin/* test/*/nfvi/*~;
+	erlc -o ebin/common/ebin kube/common/src/*.erl;

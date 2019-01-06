@@ -1,9 +1,8 @@
 -define(DNS_PUBLIC_IP,"localhost").
 -define(DNS_PUBLIC_PORT,40000).
--define(DNS_LOCAL_IP,"localhost").
--define(DNS_LOCAL_PORT,20000).
--define(HEARTBEAT_INTERVAL,1*60*1000).
--define(INACITIVITY_TIMEOUT,3*60*1000).
+
+-define(HEARTBEAT_INTERVAL,1*20*1000).
+-define(INACITIVITY_TIMEOUT,1*60*1000).
 
 % For testing 
 
