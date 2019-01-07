@@ -1,0 +1,9 @@
+{specification, dns}.
+{description, "Josca file for dns" }.
+{vsn, "1.0.0" }.
+{exported_services,[{"dns","1.0.0"}]}.
+{num_instances,2}.
+{zone,["master"]}.
+{geo_red,[]}.
+{needed_capabilities,[]}.
+{dependencies ,[]}.

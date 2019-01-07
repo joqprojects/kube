@@ -39,19 +39,19 @@ call(ServiceStr,M,F,A)->
     Reply=case ServiceStr of
 	      "dns"->
 %		  io:format(" ~p~n",[{?MODULE,?LINE,ServiceStr,M,F,A}]),
-%		  R1=rpc:call(node(),tcp,call,[?DNS_PUBLIC_IP,?DNS_PUBLIC_PORT,?DNS_LOCAL_IP,?DNS_LOCAL_PORT,{M,F,A}]),
+%		  R1=rpc:call(node(),tcp,call,[?DNS_IP,?DNS_PORT,?DNS_LOCAL_IP,?DNS_LOCAL_PORT,{M,F,A}]),
 
-		  rpc:call(node(),tcp,call,[?DNS_PUBLIC_IP,?DNS_PUBLIC_PORT,{M,F,A}]);
+		  rpc:call(node(),tcp,call,[?DNS_IP,?DNS_PORT,{M,F,A}]);
 %		  io:format(" ~p~n",[{?MODULE,?LINE,R1}]);
-	          %tcp:call(?DNS_PUBLIC_IP,?DNS_PUBLIC_PORT,?DNS_LOCAL_IP,?DNS_LOCAL_PORT,{M,F,A});
+	          %tcp:call(?DNS_IP,?DNS_PORT,?DNS_LOCAL_IP,?DNS_LOCAL_PORT,{M,F,A});
 	      _->
 		%  io:format(" ~p~n",[{?MODULE,?LINE}]),
-		  Z=rpc:call(node(),tcp,call,[?DNS_PUBLIC_IP,?DNS_PUBLIC_PORT,{dns,get_instances,[ServiceStr]}]),
+		  Z=rpc:call(node(),tcp,call,[?DNS_IP,?DNS_PORT,{dns,get_instances,[ServiceStr]}]),
 		  %["localhost",20000,{dns,get_instances,["vim"]},'100200273']}
 		 % ["localhost",20000,{dns,get_instances,["vim"]},'100200273']
 		%  io:format(" get instances ~p~n",[{?MODULE,?LINE,Z}]),
 		  case Z of
-		%  case tcp:call(?DNS_PUBLIC_IP,?DNS_PUBLIC_PORT,?DNS_LOCAL_IP,?DNS_LOCAL_PORT,{dns,get_instances,[ServiceStr]}) of
+		%  case tcp:call(?DNS_IP,?DNS_PORT,?DNS_LOCAL_IP,?DNS_LOCAL_PORT,{dns,get_instances,[ServiceStr]}) of
 		      []->
 			  {error,[?MODULE,?LINE,'no service found',ServiceStr]};
 		      {error,Err}->

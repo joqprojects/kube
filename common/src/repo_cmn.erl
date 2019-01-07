@@ -13,6 +13,7 @@
 %-include("/include/tcp.hrl").
 -include("kube/include/dns.hrl").
 -include("kube/include/data.hrl").
+-include("kube/include/repository_data.hrl").
 %% --------------------------------------------------------------------
 %% External exports
 -compile([export_all]).
@@ -37,6 +38,37 @@
 %%          
 %% 
 %% ------------------------------------------------------------------
+build_artifact(ServiceId,EbinDir)->
+    Reply=case filelib:is_dir(EbinDir) of
+	      false->
+		  {error,[?MODULE,?LINE,'dir eexists',EbinDir]};
+	      true->
+		  AppFileBaseName=ServiceId++".app",
+		  Appfile=filename:join([EbinDir,AppFileBaseName]),
+		  {ok,[{application,_,Info}]}=file:consult(Appfile),
+		  {modules,Modules}=lists:keyfind(modules,1,Info),
+		  ModuleList=build_binaries(Modules,EbinDir,[]),
+		  {vsn,Vsn}=lists:keyfind(vsn,1,Info),
+		  {ok,AppBinary}=file:read_file(Appfile),
+		  Artifact=#artifact{service_id=ServiceId,
+				     vsn=Vsn,
+				     appfile={AppFileBaseName,AppBinary},
+				     modules=ModuleList
+				    },
+		  {ok,Artifact}
+	  end,
+    Reply.
+
+build_binaries([],_,ModuleList) ->
+    ModuleList;
+
+build_binaries([Module|T],EbinDir,ModuleList)->
+    BaseName=atom_to_list(Module)++".beam",
+    FullFileName=filename:join(EbinDir,BaseName),
+    {ok,Binary}=file:read_file(FullFileName),
+    NewModuleList=[{BaseName,Binary}|ModuleList],
+    build_binaries(T,EbinDir,NewModuleList).    
+
 
 
 create_josca_spec(Joscafile)->

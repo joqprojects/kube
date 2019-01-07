@@ -90,7 +90,7 @@ app_start(PublicIp,PublicPort,LocalIp,LocalPort,Service,Vsn)->
 
 %% Gen server functions
 
-start(InitArgs)-> gen_server:start_link({local, ?MODULE}, ?MODULE, [InitArgs], []).
+start()-> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 stop()-> gen_server:call(?MODULE, {stop},infinity).
 
 

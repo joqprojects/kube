@@ -34,6 +34,7 @@
 	 get_all_instances/0,
 	 dns_register/1,
 	 de_dns_register/1,
+	
 	 heart_beat/0
 	]
       ).
@@ -125,7 +126,6 @@ init([]) ->
 handle_call({get_all_instances},_From, State) ->
     Reply=State#state.dns_list,
     {reply, Reply, State};
-
 
 handle_call({get_instances,WantedServiceStr},_From, State) ->
     Reply=rpc:call(node(),dns_lib,get_instances,[WantedServiceStr,State#state.dns_list]),

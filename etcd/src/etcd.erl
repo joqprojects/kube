@@ -25,6 +25,7 @@
 %% --------------------------------------------------------------------
 -include("kube/include/tcp.hrl").
 -include("kube/include/dns.hrl").
+-include("kube/include/dns_data.hrl").
 -include("kube/include/data.hrl").
 %% --------------------------------------------------------------------
 
@@ -32,7 +33,8 @@
 %% Key Data structures
 %% 
 %% --------------------------------------------------------------------
-% -record ??
+-record(state, {dns_info,dbase_id}).
+%----------------------------------------------------------------------
 
 -compile([export_all]).
 -export([
@@ -46,16 +48,11 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3,handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--record(state, {service_info,dbase_id}).
+
 %% ====================================================================
 %% External functions
 %% ====================================================================
 
-app_start(ServiceInfo)->
-    ok=application:set_env(?MODULE,service_info,ServiceInfo),
-    R1=application:load(?MODULE),
-    R2=application:start(?MODULE),
-    {R1,R2}.
 %% Gen server functions
 
 start(Args)-> gen_server:start_link({local, ?MODULE}, ?MODULE, [Args], []).
@@ -164,18 +161,21 @@ init([ServiceInfo]) ->
 	{ok,dbase_already_exsist}->
 	    ok;
 	 {ok,dbase_created} -> % Intial values
-	    init_etcd:start(DbaseId)
+	    ok
     end,
-    % Manual initiation - add admin api
-    {_,PublicPort}=ServiceInfo#service_info.public,
-    {ok, LSockNode}=gen_tcp:listen(PublicPort,?SERVER_SETUP),
-    spawn(fun()-> tcp:par_connect(LSockNode) end),    
-
-    {_,LocalPort}=ServiceInfo#service_info.local,
-    {ok, LSock}=gen_tcp:listen(LocalPort,?SERVER_SETUP),
-    spawn(fun()-> tcp:par_connect(LSock) end),
+    {ok,MyIp}=application:get_env(ip_addr),
+    {ok,Port}=application:get_env(port),
+    {ok,ServiceId}=application:get_env(service_id),
+    {ok,Vsn}=application:get_env(vsn),
+    MyDnsInfo=#dns_info{time_stamp="not_initiaded_time_stamp",
+			service_id = ServiceId,
+			vsn = Vsn,
+			ip_addr=MyIp,
+			port=Port
+		       },
+    spawn(fun()-> local_heart_beat(?HEARTBEAT_INTERVAL) end), 
     io:format("~p~n",[{?MODULE,'  started ', ?LINE}]),
-    {ok, #state{service_info=ServiceInfo,dbase_id=DbaseId}}. 
+    {ok, #state{dns_info=MyDnsInfo,dbase_id=DbaseId}}. 
     
 %% --------------------------------------------------------------------
 %% Function: handle_call/3
@@ -193,9 +193,9 @@ handle_call({ping}, _From, State) ->
 
 handle_call({api_delete_dbase}, _From, State) ->
     DbaseId=State#state.dbase_id,
-    ServiceInfo=State#state.service_info,
+    DnsInfo=State#state.dns_info,
     Reply=dbase_dets:delete_dbase(DbaseId),
-    NewState=State#state{service_info=ServiceInfo,dbase_id=no_dase},
+    NewState=State#state{dns_info=DnsInfo,dbase_id=no_dase},
     {reply, Reply, NewState};
 
 handle_call({api_all}, _From, State) ->
@@ -315,8 +315,8 @@ handle_call({delete_app_artifact,AppId,Vsn}, _From, State) ->
 
 
 handle_call({heart_beat}, _From, State) ->
-    InitArgs=State#state.service_info,
-    Reply=if_dns:call("dns",dns,register,[InitArgs]),
+    InitArgs=State#state.dns_info,
+    Reply=if_dns:call("dns",dns,dns_register,[InitArgs]),
    %  io:format(" ~p~n",[{?MODULE,?LINE,Reply}]),
    {reply, Reply, State};
     

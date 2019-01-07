@@ -27,17 +27,6 @@
 %% External functions
 %% ====================================================================
 
-boot()->
-    ServiceInfo=#service_info
-	{
-	  status=not_started,
-	  service_id="etcd",
-	  vsn="1.0.0",
-	  public={?ETCD_PUBLIC_IP,?ETCD_PUBLIC_PORT},
-	  local={?ETCD_LOCAL_IP,?ETCD_LOCAL_PORT}
-	},
-    etcd:app_start(ServiceInfo).
-  %  application:start(etcd).
 
 
 

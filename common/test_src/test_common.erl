@@ -32,7 +32,7 @@
 %% --------------------------------------------------------------------
 
 start_test()->
- %   glurk=upnpc:get_all_ports(),
+    application:start(common).
     ok.
 
 delete_all_test()->

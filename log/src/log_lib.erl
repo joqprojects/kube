@@ -30,8 +30,6 @@
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
-boot()->
-    log:app_start(?LOG_PUBLIC_IP,?LOG_PUBLIC_PORT,?LOG_LOCAL_IP,?LOG_LOCAL_PORT,"log","1.0.0").
 
 
 %% --------------------------------------------------------------------
