@@ -182,8 +182,9 @@ code_change(_OldVsn, State, _Extra) ->
 %% --------------------------------------------------------------------
 local_heart_beat(Interval)->
 %    io:format(" ~p~n",[{?MODULE,?LINE}]),
-    timer:sleep(Interval),
+    timer:sleep(10),
     ?MODULE:heart_beat(),
+    timer:sleep(Interval),
     spawn(fun()-> local_heart_beat(Interval) end).
 
 

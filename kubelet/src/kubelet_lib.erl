@@ -102,6 +102,45 @@ load_start_apps([Module|T],MyIp,Port,Acc) ->
     R=application:start(Module),
     NewAcc=[{ServiceId,Vsn,R}|Acc],
     load_start_apps(T,MyIp,Port,NewAcc).
+
+%% --------------------------------------------------------------------
+%% Function: 
+%% Description:
+%% Returns: non
+%% --------------------------------------------------------------------
+stop_unload_app(DnsInfo)->
+    #dns_info{service_id=ServiceId,vsn=Vsn}=DnsInfo,
+    Artifact=if_dns:call("repo",repo,read_artifact,[ServiceId,Vsn]),    
+    #artifact{service_id=ServiceId,
+	      vsn=Vsn,
+	      appfile={AppFileBaseName,_},
+	      modules=Modules
+	     }=Artifact,
+    Ebin=case ServiceId of
+	     "lib"->
+		 "lib_ebin";
+	     "kubelet"->
+		 "kubelet_ebin";
+	     _->
+		 ?SERVICE_EBIN
+	 end,   
+    Module=list_to_atom(ServiceId),
+    application:stop(Module),
+    application:unload(Module),
+
+    Appfile=filename:join(Ebin,AppFileBaseName),
+    ok=file:delete(Appfile),
+    DeleteResult=[file:delete(filename:join(Ebin,ModuleName))||{ModuleName,_}<-Modules], 
+    if_dns:call("dns",dns,de_dns_register,[DnsInfo]),
+    Reply=case [Y||Y<-DeleteResult,false=={Y=:=ok}] of
+	      []->
+		  ok;
+	      Err ->
+		  {error,[?MODULE,?LINE,'error deleting modules',Err]}
+	  end,
+   Reply.
+    
+
 %% --------------------------------------------------------------------
 %% Function: 
 %% Description:
