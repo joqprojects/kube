@@ -75,10 +75,17 @@ heart_beat()->
 %%          {stop, Reason}
 %% --------------------------------------------------------------------
 init([]) ->
+    file:delete("glurk.dbase"),   
     Type=set,
-    DbaseId="repository.dbase",
+    DbaseId="glurk.dbase",
     dbase_dets:create_dbase(Type,DbaseId),
-     {ok,MyIp}=application:get_env(ip_addr),
+%--- just for test'    
+    init_glurk([{"adder","../../ebin/adder_100/ebin"},
+	        {"lib","../../ebin/lib/ebin"},
+		{"dns","../../ebin/dns/ebin"}
+	       ]),
+%----
+    {ok,MyIp}=application:get_env(ip_addr),
     {ok,Port}=application:get_env(port),
     {ok,ServiceId}=application:get_env(service_id),
     {ok,Vsn}=application:get_env(vsn),
@@ -120,6 +127,7 @@ handle_call({read_artifact,ServiceId,Vsn}, _From, State) ->
 handle_call({heart_beat}, _From, State) ->
     DnsInfo=State#state.dns_info,
     if_dns:call("dns",dns,dns_register,[DnsInfo]),
+    rpc:cast(node(),kubelet,dns_register,[DnsInfo]),
    % if_dns:call("contoller",controller,controller_register,[DnsInfo]),
     Reply=ok,
    {reply, Reply, State};
@@ -177,3 +185,21 @@ local_heart_beat(Interval)->
     timer:sleep(Interval),
     ?MODULE:heart_beat(),
     spawn(fun()-> local_heart_beat(Interval) end).
+
+
+%% --------------------------------------------------------------------
+%% Func: code_change/3
+%% Purpose: Convert process state when code is changed
+%% Returns: {ok, NewState}
+%% --------------------------------------------------------------------
+init_glurk([])->
+    ok;
+init_glurk([{ServiceId,Ebin}|T])->
+    case repo_lib:build_artifact(ServiceId,Ebin) of
+	{ok,Artifact}->
+	    {ok,artifact_updated}=repo_lib:update_artifact(Artifact,"glurk.dbase");
+	Err ->
+	       io:format("Error ~p~n",[{?MODULE,?LINE,ServiceId,Ebin,Err}])
+    end,
+    init_glurk(T).
+    

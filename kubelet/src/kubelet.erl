@@ -13,6 +13,7 @@
 %% --------------------------------------------------------------------
 -include("kube/include/tcp.hrl").
 -include("certificate/cert.hrl").
+-include("kube/include/dns.hrl").
 -include("kube/include/dns_data.hrl").
 -include("kube/include/kubelet_data.hrl").
 %% --------------------------------------------------------------------
@@ -25,7 +26,7 @@
 %% --------------------------------------------------------------------
 %% Records
 %% --------------------------------------------------------------------
--record(state, {kubelet_info,lSock,max_workers,active_workers,workers,service_list}).
+-record(state, {kubelet_info,lSock,max_workers,active_workers,workers,dns_list}).
 %% --------------------------------------------------------------------
 
 
@@ -38,7 +39,8 @@
 	 my_ip/0,
 	 dns_register/1,
 	 de_dns_register/1,
-	 start_kubelet/0
+	 start_kubelet/0,
+	 heart_beat/0
 	]).
 -export([start/0,stop/0]).
 
@@ -71,13 +73,18 @@ my_ip()->
 loaded_services()-> 
     gen_server:call(?MODULE, {loaded_services},infinity).
 
-dns_register(ServiceInfo)-> 
-    gen_server:cast(?MODULE, {dns_register,ServiceInfo}).
-de_dns_register(ServiceInfo)-> 
-    gen_server:cast(?MODULE, {de_dns_register,ServiceInfo}).
+dns_register(DnsInfo)-> 
+    gen_server:cast(?MODULE, {dns_register,DnsInfo}).
+de_dns_register(DnsInfo)-> 
+    gen_server:cast(?MODULE, {de_dns_register,DnsInfo}).
 
 upgrade(ServiceId,Vsn)-> 
     gen_server:cast(?MODULE, {ServiceId,Vsn}).
+
+
+heart_beat()->
+    gen_server:call(?MODULE, {heart_beat},infinity).
+%%-----------------------------------------------------------------------
 
 %% --------------------------------------------------------------------
 %% Function: init/1
@@ -106,17 +113,18 @@ init([]) ->
 			zone=Zone,
 			capabilities=Capabilities
 		       },    
-    Result=rpc:call(node(),kubelet_lib,load_start_apps,[PreLoadApps,MyIp,Port]),
-    StartedApps=[{ServiceId,Vsn}||{ServiceId,Vsn,ok}<-Result],
+    Result=rpc:call(node(),kubelet_lib,load_start_pre_loaded_apps,[PreLoadApps,MyIp,Port]),
+  %  StartedApps=[{ServiceId_X,Vsn_X}||{ServiceId_X,Vsn_X,ok}<-Result],
     {ok, LSock} = gen_tcp:listen(Port,?SERVER_SETUP),
     Workers=init_workers(LSock,MaxWorkers,[]), % Glurk remove?
 
     %------ send info to controller
     % if_dns:call("controller",controller,node_register,[KubeletInfo]),
+    spawn(fun()-> local_heart_beat(?HEARTBEAT_INTERVAL) end), 
     io:format("Started Service  ~p~n",[{?MODULE}]),
     {ok, #state{kubelet_info=KubeletInfo,
 		lSock=LSock,max_workers=MaxWorkers,
-		active_workers=0,workers=Workers,service_list=StartedApps}}.
+		active_workers=0,workers=Workers,dns_list=[]}}.
 
 %% --------------------------------------------------------------------
 %% Function: handle_call/3
@@ -147,32 +155,28 @@ handle_call({my_ip},_From, State) ->
     {reply, Reply, State};
 
 handle_call({loaded_services},_From, State) ->
-    Reply=State#state.service_list,
+    Reply=State#state.dns_list,
     {reply, Reply, State};
+
 handle_call({start_service,ServiceId,Vsn},_From, State) ->
-   Reply= case lists:keymember(ServiceId,1,State#state.service_list) of
-	      true->
-		  {error,[?MODULE,?LINE,'allready started',ServiceId,Vsn]};
-	      false->
-	    % this function  shall be in lib so it can be used by upgrade
-	    % get tar file from SW repositroy
-	    % create service_info record
-	    % create temp dir 
-	    % untar files 
-	    % read app file -get all modules
-	    % copy modules and app file to service_ebin dir
-	    % start the service
-	    % remove temp dir
-	    % add service to service_list
-	    % service shall push info to dns and kubectroller 
-	    % reply
-		  glurk
-	    
-	  end,
+    DnsList=State#state.dns_list,
+    #kubelet_info{ip_addr=MyIp,port=Port}=State#state.kubelet_info,   
+    Reply= case [DnsInfo||DnsInfo<-DnsList,DnsInfo#dns_info.service_id =:=ServiceId] of
+	      []->
+		   case rpc:call(node(),kubelet_lib,load_start_app,[ServiceId,Vsn,MyIp,Port]) of
+		       ok->
+			   ok;
+		       Err->
+			   {error,[?MODULE,?LINE,Err,ServiceId,Vsn]}
+		   end;
+	       AlreadyLoaded->
+		   {error,[?MODULE,?LINE,'already loaded and started',ServiceId,Vsn,AlreadyLoaded]}
+	   end,
+    
     {reply, Reply, State};
 
 handle_call({stop_service,ServiceId}, _From, State) ->
-    Reply=case lists:keymember(ServiceId,1,State#state.service_list) of
+    Reply=case lists:keymember(ServiceId,1,State#state.dns_list) of
 	      false->
 		  {error,[?MODULE,?LINE,'service nexists',ServiceId]};
 	      true->
@@ -184,6 +188,16 @@ handle_call({stop_service,ServiceId}, _From, State) ->
 		  glurk
 	  end,
     {reply, Reply, State};
+
+
+handle_call({heart_beat}, _From, State) ->
+    DnsList=State#state.dns_list,
+    Now=erlang:now(),
+    NewDnsList=[DnsInfo||DnsInfo<-DnsList,
+		      (timer:now_diff(Now,DnsInfo#dns_info.time_stamp)/1000)<?INACITIVITY_TIMEOUT],
+    NewState=State#state{dns_list=NewDnsList},
+    Reply=ok,
+   {reply, Reply, NewState};
 
 handle_call({stop}, _From, State) ->
     {stop, normal, shutdown_ok, State};
@@ -214,6 +228,21 @@ handle_cast({upgrade,_ServiceId,_Vsn}, State) ->
     
     
     {noreply, State};
+
+handle_cast({dns_register,DnsInfo}, State) ->
+  %  io:format("~p~n",[{?MODULE,?LINE,register,DnsInfo}]),
+    DnsList=State#state.dns_list,
+    NewDnsList=kubelet_lib:dns_register(DnsInfo,DnsList),
+    NewState=State#state{dns_list=NewDnsList},
+  %  io:format("~p~n",[{?MODULE,?LINE,register,NewState}]),
+    {noreply, NewState};
+
+handle_cast({de_dns_register,DnsInfo}, State) ->
+%    io:format("~p~n",[{?MODULE,?LINE,de_register,InitArgs}]),
+    DnsList=State#state.dns_list,
+    NewDnsList=kubelet_lib:de_dns_register(DnsInfo,DnsList),
+    NewState=State#state{dns_list=NewDnsList},
+    {noreply, NewState};
 
 handle_cast(Msg, State) ->
     io:format("unmatched match cast ~p~n",[{Msg,?MODULE,time()}]),
@@ -273,6 +302,23 @@ code_change(_OldVsn, State, _Extra) ->
 %% --------------------------------------------------------------------
 %%% Internal functions
 %% --------------------------------------------------------------------
+%% --------------------------------------------------------------------
+%% Function: 
+%% Description:
+%% Returns: non
+%% --------------------------------------------------------------------
+local_heart_beat(Interval)->
+  %  io:format(" ~p~n",[{?MODULE,?LINE}]),
+    timer:sleep(Interval),
+    ?MODULE:heart_beat(),
+    spawn(fun()-> local_heart_beat(Interval) end).
+
+%% --------------------------------------------------------------------
+%% Function: 
+%% Description:
+%% Returns: non
+%% --------------------------------------------------------------------
+
 init_workers(_,0,Workers)->
     Workers;
 init_workers(LSock,N,Workers)->

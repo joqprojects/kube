@@ -74,3 +74,15 @@ local_log_call(DnsInfo,Type,Info,_DnsList)->
 %	    io:format("Error ~p~n",[{?MODULE,?LINE,Err}])
  %   end.
     Event.
+
+
+
+get_instances(WantedServiceStr,DnsList)->
+    Reply=[DnsInfo||DnsInfo<-DnsList, WantedServiceStr=:=DnsInfo#dns_info.service_id], 
+    Reply.
+
+get_instances(WantedServiceStr,WantedVsnStr,DnsList)->
+    Reply=[DnsInfo||DnsInfo<-DnsList, {WantedServiceStr,WantedVsnStr}=:={DnsInfo#dns_info.service_id,DnsInfo#dns_info.vsn}], 
+    Reply.
+
+

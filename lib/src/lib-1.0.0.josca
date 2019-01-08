@@ -1,0 +1,9 @@
+{specification, lib}.
+{description, "Josca file for lib" }.
+{vsn, "1.0.0" }.
+{exported_services,[{"lib","1.0.0"}]}.
+{num_instances,1}.
+{zone,[]}.
+{geo_red,[]}.
+{needed_capabilities,[]}.
+{dependencies ,[]}.

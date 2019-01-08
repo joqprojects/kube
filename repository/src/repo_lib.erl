@@ -29,7 +29,10 @@
 %% Description: fun x skeleton 
 %% Returns:ok|error
 %% --------------------------------------------------------------------
+
+
 build_artifact(ServiceId,EbinDir)->
+    
     Reply=case filelib:is_dir(EbinDir) of
 	      false->
 		  {error,[?MODULE,?LINE,'dir eexists',EbinDir]};
@@ -54,10 +57,16 @@ build_binaries([],_,ModuleList) ->
     ModuleList;
 
 build_binaries([Module|T],EbinDir,ModuleList)->
+ %   io:format("~p~n",[{?MODULE,?LINE,Module,EbinDir}]),
     BaseName=atom_to_list(Module)++".beam",
     FullFileName=filename:join(EbinDir,BaseName),
-    {ok,Binary}=file:read_file(FullFileName),
-    NewModuleList=[{BaseName,Binary}|ModuleList],
+   case file:read_file(FullFileName) of
+       {error,enoent}->
+	   NewModuleList=ModuleList,
+	   io:format("{error,enoent} ~p~n",[{?MODULE,?LINE,Module,EbinDir}]);
+        {ok,Binary}->
+	   NewModuleList=[{BaseName,Binary}|ModuleList]
+   end,
     build_binaries(T,EbinDir,NewModuleList).    
 
 
