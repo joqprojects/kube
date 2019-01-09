@@ -4,15 +4,17 @@
 %%%
 %%% Created : 10 dec 2012
 %%% -------------------------------------------------------------------
--module(nfv_mgr_lib).
+-module(controller_lib).
  
 
 
 %% --------------------------------------------------------------------
 %% Include files
 %% --------------------------------------------------------------------
--include("services/include/tcp.hrl").
--include("services/include/dns.hrl").
+-include("kube/include/tcp.hrl").
+-include("kube/include/dns.hrl").
+-include("kube/include/dns_data.hrl").
+-include("kube/include/kubelet_data.hrl").
 %% --------------------------------------------------------------------
 
 %% External exports
@@ -25,15 +27,25 @@
 %% ====================================================================
 %% External functions
 %% ====================================================================
-boot()->
-   nfv_mgr:app_start(?NFV_MGR_PUBLIC_IP,?NFV_MGR_PUBLIC_PORT,?NFV_MGR_LOCAL_IP,?NFV_MGR_LOCAL_PORT,"nfv_mgr","1.0.0").
-
 
 %% --------------------------------------------------------------------
 %% Function: 
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
+
+%% --------------------------------------------------------------------
+%% Function: 
+%% Description:
+%% Returns: non
+%% --------------------------------------------------------------------
+
+%% --------------------------------------------------------------------
+%% Function: 
+%% Description:
+%% Returns: non
+%% --------------------------------------------------------------------
+
 start_application(AppId,Vsn,InitArgs)->    
     ServicesToStart=josca:start_order(AppId,Vsn),
     StartResult=start_application_1(ServicesToStart,InitArgs,[]),

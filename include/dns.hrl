@@ -1,7 +1,7 @@
 
 
 -define(HEARTBEAT_INTERVAL,1*20*1000).
--define(INACITIVITY_TIMEOUT,1*60*1000).
+-define(INACITIVITY_TIMEOUT,1*45*1000).
 
 % For testing 
 -define (CONTROLLER_IP,"localhost").

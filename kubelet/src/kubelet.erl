@@ -119,7 +119,7 @@ init([]) ->
     Workers=init_workers(LSock,MaxWorkers,[]), % Glurk remove?
 
     %------ send info to controller
-    % if_dns:call("controller",controller,node_register,[KubeletInfo]),
+    if_dns:call("controller",controller,node_register,[KubeletInfo]),
     spawn(fun()-> local_heart_beat(?HEARTBEAT_INTERVAL) end), 
     io:format("Started Service  ~p~n",[{?MODULE}]),
     {ok, #state{kubelet_info=KubeletInfo,
@@ -201,6 +201,11 @@ handle_call({heart_beat}, _From, State) ->
     Now=erlang:now(),
     NewDnsList=[DnsInfo||DnsInfo<-DnsList,
 		      (timer:now_diff(Now,DnsInfo#dns_info.time_stamp)/1000)<?INACITIVITY_TIMEOUT],
+
+    % Send services registration to Controller
+    [if_dns:call("controller",controller,dns_register,[DnsInfo])||DnsInfo<-NewDnsList],
+    % Register node
+    if_dns:call("controller",controller,node_register,[State#state.kubelet_info]),
     NewState=State#state{dns_list=NewDnsList},
     Reply=ok,
    {reply, Reply, NewState};

@@ -1,12 +1,12 @@
 %% This is the application resource file (.app file) for the 'base'
 %% application.
-{application, nfv_mgr,
-[{description, "nfv_mgr  " },
+{application, controller,
+[{description, "controller  " },
 {vsn, "1.0.0" },
 {modules, 
-	  [nfv_mgr_app,nfv_mgr_sup,nfv_mgr,nfv_mgr_lib]},
-{registered,[nfv_mgr]},
+	  [controller_app,controller_sup,controller,controller_lib]},
+{registered,[controller]},
 {applications, [kernel,stdlib]},
-{mod, {nfv_mgr_app,[]}},
+{mod, {controller_app,[]}},
 {start_phases, []}
 ]}.

@@ -47,9 +47,7 @@
 
 -include("kube/include/tcp.hrl").
 -include("kube/include/dns.hrl").
--include("kube/include/dns_data.hrl").
 -include("kube/include/data.hrl").
--include("kube/include/kubelet_data.hrl").
 %% --------------------------------------------------------------------
 
 
@@ -57,30 +55,40 @@
 %% Key Data structures
 %% 
 %% --------------------------------------------------------------------
-%-record(state, {applications,services,cluster_status}).
--record(state,{dns_info,dns_list,node_list,application_list}).
+-record(state,{dns_info,dns_list}).
 %%---------------------------------------------------------------------
 
 -export([
 	 start_application/2,stop_application/2,% get_services/0,
 	 get_all_applications/0,get_all_services/0,
-	 all_nodes/0,
-	 dns_register/1,de_dns_register/1,
-	 node_register/1,de_node_register/1
+	 service_register/1,de_service_register/1,
+	 node_register/1,de_node_register/1,
+	 updated_nfvi_list/1
 	]).
 
--export([start/0,
+-export([start/1,
 	 stop/0,
+	 app_start/6,
 	 heart_beat/0
 	]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3,handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
-
+-record(state, {applications,services,cluster_status}).
 %% ====================================================================
 %% External functions
 %% ====================================================================
+app_start(PublicIp,PublicPort,LocalIp,LocalPort,Service,Vsn)->
+    ok=application:set_env(?MODULE,public_ip,PublicIp),
+    ok=application:set_env(?MODULE,public_port,PublicPort),
+    ok=application:set_env(?MODULE,local_ip,LocalIp),
+    ok=application:set_env(?MODULE,local_port,LocalPort),
+    ok=application:set_env(?MODULE,service,Service),
+    ok=application:set_env(?MODULE,vsn,Vsn),
+    R1=application:load(?MODULE),
+    R2=application:start(?MODULE),
+    {R1,R2}.
 
 %% Gen server functions
 
@@ -97,9 +105,6 @@ heart_beat()->
 
 %% end test
    
-all_nodes()->
-    gen_server:call(?MODULE, {all_nodes},infinity).
-
 get_all_applications()->
     gen_server:call(?MODULE, {get_all_applications},infinity).
 
@@ -116,13 +121,13 @@ stop_application(AppId,Vsn)->
 %%-----------------------------------------------------------------------
 node_register(KubeletInfo)->
     gen_server:cast(?MODULE, {node_register,KubeletInfo}).
-de_node_register(KubeletInfo)->
-    gen_server:cast(?MODULE, {de_node_register,KubeletInfo}).
+node_de_register(KubeletInfo)->
+    gen_server:cast(?MODULE, {node_de_register,KubeletInfo}).
 
 dns_register(DnsInfo)->
     gen_server:cast(?MODULE, {dns_register,DnsInfo}).
-de_dns_register(DnsInfo)->
-    gen_server:cast(?MODULE, {de_dns_register,DnsInfo}).
+dns_de_register(DnsInfo)->
+    gen_server:cast(?MODULE, {dns_de_register,DnsInfo}).
 
 
 %% ====================================================================
@@ -151,7 +156,7 @@ init([]) ->
 		       },
     spawn(fun()-> local_heart_beat(?HEARTBEAT_INTERVAL) end),     
     io:format("Started Service  ~p~n",[{?MODULE}]),
-    {ok, #state{dns_info=MyDnsInfo,dns_list=[],node_list=[],application_list=[]}}.  
+    {ok, #state{init_args=InitArgs,application_list=ApplicationList,service_list=ServiceList}}.  
     
 %% --------------------------------------------------------------------
 %% Function: handle_call/3
@@ -164,13 +169,66 @@ init([]) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
 handle_call({start_application,AppId,Vsn}, _From, State) ->
-    Reply={AppId,Vsn},
-    NewState=State,
+    Reply= case nfv_mgr_lib:check_app_started(AppId,Vsn,State#state.application_list) of
+	       {error,already_started}->
+		   NewState=State,
+		   if_log:call(State#state.init_args,error,[?MODULE,?LINE,'already started',AppId,Vsn]),
+		   {error,[?MODULE,?LINE,'already started',AppId,Vsn]};
+	       {ok,not_started}->
+		   % ServicesToStart=josca:start_order(AppId,Vsn),
+		   case nfv_mgr_lib:start_application(AppId,Vsn,State#state.init_args) of
+		       {ok,StartedServices}->
+			   NewApplicationList=[{{AppId,Vsn},StartedServices}|State#state.application_list],
+			   NewServiceList=lists:append(StartedServices,State#state.application_list),
+			   {ok,object_updated}=dbase_dets:update(application_list,NewApplicationList,?NFV_MGR_DBASE),  
+			   {ok,object_updated}=dbase_dets:update(service_list,NewServiceList,?NFV_MGR_DBASE), 
+			   NewState=State#state{application_list=NewApplicationList,
+						service_list=NewServiceList
+					       },
+			   {ok,AppId,Vsn};
+		       {error,Err} ->
+			   NewState=State,
+			   if_log:call(State#state.init_args,error,[?MODULE,?LINE,'failed to start application',AppId,Vsn,Err]),
+			   {error,[?MODULE,?LINE,Err]};
+		       Err ->
+			   io:format("Error ~p~n",[{?MODULE,?LINE,Err}]),
+			   NewState=State,
+			   if_log:call(State#state.init_args,error,[?MODULE,?LINE,AppId,Vsn,Err]),
+			   {error,[?MODULE,?LINE,Err]}
+		   end
+	   end,
     {reply, Reply,NewState};
 
 handle_call({stop_application,Id,Vsn}, _From, State)->
-    Reply={Id,Vsn},
-    NewState=State,
+    Reply=case lists:keyfind({Id,Vsn},1,State#state.application_list) of
+	      false->
+		  NewState=State,
+		  if_log:call(State#state.init_args,error,[?MODULE,?LINE,'doesnt exists',Id,Vsn]),
+		  {error,[?MODULE,?LINE,'doesnt exists',Id,Vsn]};
+	      {{AppId,Vsn},StartedServices}->
+		  %	  io:format("StartedServices ~p~n",[{?MODULE,?LINE,StartedServices}]),
+		  case nfv_mgr_lib:stop_application(StartedServices,State#state.init_args) of
+		      {ok,StoppedServices}->
+			  NewServiceList=[lists:delete(X_InitArgs,State#state.service_list)||{ok,X_InitArgs}<-StoppedServices],
+			  {ok,object_updated}=dbase_dets:update(service_list,NewServiceList,?NFV_MGR_DBASE),  		  
+			  NewApplicationList=lists:keydelete({AppId,Vsn},1,State#state.application_list),
+			  {ok,object_updated}=dbase_dets:update(application_list,NewApplicationList,?NFV_MGR_DBASE),  
+			  NewState=State#state{application_list=NewApplicationList,service_list=NewServiceList},
+			  ok;
+		      {error,StoppedServices}->
+			  NewState=State,
+			  if_log:call(State#state.init_args,error,[?MODULE,?LINE,'failed to stop',StoppedServices]),
+			  {error,[?MODULE,?LINE,'failed to stop',StoppedServices]};
+		      Err ->
+			  NewState=State,
+			  if_log:call(State#state.init_args,error,[?MODULE,?LINE,'failed to stop',Err]),
+			  {error,[?MODULE,?LINE,'failed to stop',Err]}
+		  end;
+	      Err ->
+		  NewState=State,
+		  if_log:call(State#state.init_args,error,[?MODULE,?LINE,'failed to stop',Err]),
+		  {error,[?MODULE,?LINE,'failed to stop',Err]}
+	  end,
     {reply, Reply,NewState};
 
 handle_call({get_all_applications},_From, State) ->
@@ -178,12 +236,10 @@ handle_call({get_all_applications},_From, State) ->
     {reply, Reply, State};
 
 handle_call({get_all_services},_From, State) ->
-    Reply=State#state.dns_list,
+    Reply=State#state.service_list,
     {reply, Reply, State};
 
-handle_call({all_nodes},_From, State) ->
-    Reply=State#state.node_list,
-    {reply, Reply, State};
+
 
 
 %% --------------------------------------------------------------------
@@ -204,10 +260,8 @@ handle_call({heart_beat}, _From, State) ->
     Now=erlang:now(),
     NewDnsList=[DnsInfo||DnsInfo<-State#state.dns_list,
 		      (timer:now_diff(Now,DnsInfo#dns_info.time_stamp)/1000)<?INACITIVITY_TIMEOUT],
-   
     NewNodeList=[KubeletInfo||KubeletInfo<-State#state.node_list,
-		      (timer:now_diff(Now,KubeletInfo#kubelet_info.time_stamp)/1000)<?INACITIVITY_TIMEOUT],
-    
+		      (timer:now_diff(Now,KubeletInfoInfo#kubelet_info.time_stamp)/1000)<?INACITIVITY_TIMEOUT],
     NewState=State#state{dns_list=NewDnsList,node_list=NewNodeList},
     Reply=ok,
    {reply, Reply,NewState};
@@ -224,7 +278,7 @@ handle_call({stop}, _From, State) ->
 
 handle_call(Request, From, State) ->
     Reply = {unmatched_signal,?MODULE,Request,From},
-    if_log:call(State#state.dns_info,error,[?MODULE,?LINE,'unmatched signal',Request]),
+    if_log:call(State#state.init_args,error,[?MODULE,?LINE,'unmatched signal',Request]),
     {reply, Reply, State}.
 
 %% --------------------------------------------------------------------
@@ -240,16 +294,16 @@ handle_cast({dns_register,DnsInfo}, State) ->
     NewDnsInfo=DnsInfo#dns_info{time_stamp=TimeStamp},
     #dns_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn}=DnsInfo,
     
-    X1=[X||X<-State#state.dns_list,false==({IpAddr,Port,ServiceId,Vsn}==
+    X1=[X||X<-DnsList,false==({IpAddr,Port,ServiceId,Vsn}==
 				  {X#dns_info.ip_addr,X#dns_info.port,X#dns_info.service_id,X#dns_info.vsn})],
     NewDnsList=[NewDnsInfo|X1],
     NewState=State#state{dns_list=NewDnsList},
     {noreply, NewState};
 
-handle_cast({de_dns_register,DnsInfo}, State) ->
+handle_cast({de_dns_register,InitArgs}, State) ->
     #dns_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn}=DnsInfo,
-    NewDnsList=[X||X<-State#state.dns_list,
-		   false==({IpAddr,Port,ServiceId,Vsn}=={X#dns_info.ip_addr,X#dns_info.port,X#dns_info.service_id,X#dns_info.vsn})],
+    NewDnsList=[X||X<-DnsList,false==({IpAddr,Port,ServiceId,Vsn}==
+				  {X#dns_info.ip_addr,X#dns_info.port,X#dns_info.service_id,X#dns_info.vsn})],
     
     NewState=State#state{dns_list=NewDnsList},
     {noreply, NewState};
@@ -257,28 +311,26 @@ handle_cast({de_dns_register,DnsInfo}, State) ->
 handle_cast({node_register,KubeletInfo}, State) ->
     TimeStamp=erlang:timestamp(),
     NewKubeletInfo=KubeletInfo#kubelet_info{time_stamp=TimeStamp},
-    #kubelet_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn,
-		  max_workers=_MaxWorkers,zone=_Zone,capabilities=_Capabilities
-		 }=KubeletInfo,
-%    io:format("~p~n",[{?MODULE,?LINE,State#state.node_list}]),
+    #kubelet_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn
+	      max_workers=MaxWorkers,zone=Zone,capabilities=Capabilities
+	     }=KubeletInfo,
+    
     X1=[X||X<-State#state.node_list,false==({IpAddr,Port,ServiceId,Vsn}==
-				  {X#kubelet_info.ip_addr,X#kubelet_info.port,X#kubelet_info.service_id,X#kubelet_info.vsn})],
+				  {X#dns_info.ip_addr,X#dns_info.port,X#dns_info.service_id,X#dns_info.vsn})],
     NewKubeletList=[NewKubeletInfo|X1],
-   % io:format("~p~n",[{?MODULE,?LINE,NewKubeletList}]),
     NewState=State#state{node_list=NewKubeletList},
     {noreply, NewState};
 
-handle_cast({de_node_register,KubeletInfo}, State) ->
+handle_cast({de_dns_register,KubeletInfo}, State) ->
     #dns_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn}=KubeletInfo,
-    NewKubeletList=[X||X<-State#state.node_list,
-		       false==({IpAddr,Port,ServiceId,Vsn}==
-				   {X#kubelet_info.ip_addr,X#kubelet_info.port,X#kubelet_info.service_id,X#kubelet_info.vsn})],
+    NewKubeletList=[X||X<-State#state.node_list,false==({IpAddr,Port,ServiceId,Vsn}==
+				  {X#dns_info.ip_addr,X#dns_info.port,X#dns_info.service_id,X#dns_info.vsn})],
     
     NewState=State#state{node_list=NewKubeletList},
     {noreply, NewState};
 
 handle_cast(Msg, State) ->
-    if_log:call(State#state.dns_info,error,[?MODULE,?LINE,'unmatched signal',Msg]),
+    if_log:call(State#state.init_args,error,[?MODULE,?LINE,'unmatched signal',Msg]),
     {noreply, State}.
 
 %% --------------------------------------------------------------------
@@ -292,7 +344,7 @@ handle_cast(Msg, State) ->
 
 handle_info(Info, State) ->
     io:format("unmatched match cast ~p~n",[{time(),?MODULE,?LINE,Info}]),
-    if_log:call(State#state.dns_info,error,[?MODULE,?LINE,'unmatched signal',Info]),
+    if_log:call(State#state.init_args,error,[?MODULE,?LINE,'unmatched signal',Info]),
     {noreply, State}.
 
 %% --------------------------------------------------------------------

@@ -110,6 +110,7 @@ init([]) ->
 			port=Port
 		       },
     spawn(fun()-> local_heart_beat(?HEARTBEAT_INTERVAL) end), 
+    io:format("Started Service  ~p~n",[{?MODULE}]),
     {ok, #state{dns_info=MyDnsInfo,dns_list=[]}}.
     
 %% --------------------------------------------------------------------

@@ -4,7 +4,7 @@
 %%%
 %%% Created : 10 dec 2012
 %%% -------------------------------------------------------------------
--module(nfv_mgr_sup).
+-module(controller_sup).
 
 -behaviour(supervisor).
 %% --------------------------------------------------------------------
@@ -14,7 +14,7 @@
 %% --------------------------------------------------------------------
 %% External exports
 %% --------------------------------------------------------------------
--export([start_link/1]).
+-export([start_link/0]).
 
 %% --------------------------------------------------------------------
 %% Internal exports
@@ -28,7 +28,7 @@
 %% --------------------------------------------------------------------
 -define(SERVER, ?MODULE).
 %% Helper macro for declaring children of supervisor
--define(CHILD(I, Type, Args), {I, {I, start, [Args]}, permanent, 5000, Type, [I]}).
+-define(CHILD(I, Type), {I, {I, start, []}, permanent, 5000, Type, [I]}).
 %% --------------------------------------------------------------------
 %% Records
 %% --------------------------------------------------------------------
@@ -37,8 +37,8 @@
 %% External functions
 %% ====================================================================
 
-start_link(InitArgs)->
-   supervisor:start_link({local,?MODULE}, ?MODULE,[InitArgs]).
+start_link()->
+   supervisor:start_link({local,?MODULE}, ?MODULE,[]).
 
 %% ====================================================================
 %% Server functions
@@ -49,9 +49,9 @@ start_link(InitArgs)->
 %%          ignore                          |
 %%          {error, Reason}
 %% --------------------------------------------------------------------
-init([InitArgs]) ->
+init([]) ->
     {ok,{{one_for_one,5,10}, 
-	 [?CHILD(nfv_mgr,worker,InitArgs)]}}.
+	 [?CHILD(controller,worker)]}}.
 %% ====================================================================
 %% Internal functions
 %% ====================================================================

@@ -4,14 +4,14 @@
 %%%  
 %%% Created : 10 dec 2012
 %%% -------------------------------------------------------------------
--module(test_nfv_mgr).
+-module(test_controller).
 %% --------------------------------------------------------------------
 %% Include files 
 %% --------------------------------------------------------------------
 %%  -include("").
 -include_lib("eunit/include/eunit.hrl").
--include("../include/tcp.hrl").
--include("../include/dns.hrl").
+-include("kube/include/tcp.hrl").
+-include("kube/include/dns.hrl").
 %% --------------------------------------------------------------------
 -export([]).
 

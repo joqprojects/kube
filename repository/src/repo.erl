@@ -82,7 +82,8 @@ init([]) ->
 %--- just for test'    
     init_glurk([{"adder","../../ebin/adder_100/ebin"},
 	        {"lib","../../ebin/lib/ebin"},
-		{"dns","../../ebin/dns/ebin"}
+		{"dns","../../ebin/dns/ebin"},
+		{"controller","../../ebin/controller/ebin"}		
 	       ]),
 %----
     {ok,MyIp}=application:get_env(ip_addr),

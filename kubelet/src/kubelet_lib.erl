@@ -59,6 +59,7 @@ load_start_app(ServiceId,VsnInput,MyIp,Port)->
     R=application:start(Module).    
 
 load_start_pre_loaded_apps(PreLoadApps,MyIp,Port)->
+  %  io:format("~p~n",[{?MODULE,?LINE,PreLoadApps}]),
     load_start_apps(PreLoadApps,MyIp,Port,[]).
 load_start_apps([],_,_,StartResult)->
     StartResult;
@@ -89,7 +90,7 @@ load_start_apps([dns|T],MyIp,Port,Acc) -> %Has to be pre loaded
     load_start_apps(T,MyIp,Port,NewAcc);
     
 load_start_apps([Module|T],MyIp,Port,Acc) ->
-    Artifact=load_appfiles(atom_to_list(Module),latest),
+    {ok,Artifact}=load_appfiles(atom_to_list(Module),latest),
     #artifact{service_id=ServiceId,
 	      vsn=Vsn,
 	      appfile={_,_},
@@ -182,7 +183,6 @@ load_appfiles(ServiceId,VsnInput)->  % VsnInput Can be latest !!!
 		 ?SERVICE_EBIN
 	 end,
     Artifact=if_dns:call("repo",repo,read_artifact,[ServiceId,VsnInput]),
-  %  io:format("~p~n",[{?MODULE,?LINE,Artifact}]),
     #artifact{service_id=ServiceId,
 	      vsn=Vsn,
 	      appfile={AppFileBaseName,AppBinary},
