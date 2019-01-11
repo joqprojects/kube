@@ -88,7 +88,8 @@ init([]) ->
 %--- just for test'    
     init_glurk([{"adder","../../ebin/adder_100/ebin"},
 	        {"lib","../../ebin/lib/ebin"},
-		{"controller","../../ebin/controller/ebin"}
+		{"controller","../../ebin/controller/ebin"},
+		{"mymath","../../applications"}
 	       ],
 	      DbaseId),
 %----
@@ -211,8 +212,8 @@ init_glurk([],_)->
 init_glurk([{ServiceId,Ebin}|T],DbaseId)->
     BaseName=ServiceId++".josca",
     FileName=filename:join(Ebin,BaseName),
-    {ok,L}=file:consult(FileName),
-    {vsn,Vsn}=lists:keyfind(vsn,1,L),
-    {ok,Binary}=file:read_file(FileName),
-    io:format("~p~n",[{?MODULE,?LINE,catalog_lib:create(ServiceId,Vsn,Binary,DbaseId)}]),
+    {ok,JoscaInfo}=file:consult(FileName),
+    {vsn,Vsn}=lists:keyfind(vsn,1,JoscaInfo),
+   % {ok,Binary}=file:read_file(FileName),
+    io:format("~p~n",[{?MODULE,?LINE,catalog_lib:create(ServiceId,Vsn,JoscaInfo,DbaseId)}]),
     init_glurk(T,DbaseId).

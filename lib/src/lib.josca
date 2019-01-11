@@ -1,4 +1,5 @@
 {specification, lib}.
+{type,service}.
 {description, "Josca file for lib" }.
 {vsn, "1.0.0" }.
 {exported_services,[{"lib","1.0.0"}]}.
