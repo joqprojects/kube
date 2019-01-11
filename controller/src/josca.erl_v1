@@ -32,8 +32,9 @@
 info(FullFileName)->
     {ok,Info}=file:consult(FullFileName),
     {specification,NameStr}=lists:keyfind(specification,1,Info),
+    {type,Type}=lists:keyfind(type,1,Info),
     {vsn,VsnStr}=lists:keyfind(vsn,1,Info),
-    {NameStr,VsnStr,Info}.
+    {Type,NameStr,VsnStr,Info}.
 
 files(Info)->
     R= case lists:keyfind(josca_files,1,Info) of
@@ -82,7 +83,14 @@ geo_red(I)->
 	       GeoRed
        end,
     R.
-
+dependencies(I)->
+    R= case  lists:keyfind(dependencies,1,I) of
+	   false->
+	       [];
+	   {geo_red,Dependencies}->
+	       Dependencies
+       end,
+    R.    
 
 %-----------------------------------------------------------------------
 create(FullFileName)->
@@ -123,29 +131,51 @@ x_geo_red(NameStr,VsnStr)->
 %% --------------------------------------------------------------------------
 
 
-start_order(AppId,Vsn)->
-    JoscaInfo=if_dns:call("repo",repo,read_josca_file,[AppId,Vsn]),
-    Services=josca:services(JoscaInfo),
-    JoscaFiles=josca:files(JoscaInfo),
-%    io:format("~p~n",[{?MODULE,?LINE,JoscaInfo}]),
-    Acc=case Services of 
-	    []-> % Root is a Appfile
-		[]; % is a service 
-	    [{ServiceStr,VsnStr}]->
-		[{{service,ServiceStr,VsnStr},{zone,josca:zone(JoscaInfo)},{needed_capabilities,josca:needed_capabilities(JoscaInfo)}}]
-	end,
-  %  io:format("~p~n",[{?MODULE,?LINE,Acc}]),
-    Result=dfs(JoscaFiles,Acc),
+start_order(Name,Vsn)->
+    Result=case if_dns:call("catalog",catalog,read,[Name,Vsn]) of
+	       {error,Err}->
+		   {error,[?MODULE,?LINE,Err]};
+	       {ok,FileName,JoscaInfo}->
+		   Acc=case Type of 
+			   application->
+			       [];
+			   service ->
+			       Service=josca:services(JoscaInfo),
+			       JoscaFiles=josca:files(JoscaInfo),
+			       io:format("~p~n",[{?MODULE,?LINE,JoscaInfo}]),
+			       Service
+		       end,
+		   io:format("~p~n",[{?MODULE,?LINE,Acc}]),
+		   dfs(JoscaFiles,Acc)
+	   end,
     Result.
 
 
 dfs([],Acc)->
     Acc;
-dfs([{SpecStr,VsnJoscaStr}|T],Acc)->
- %   io:format("~p~n",[{?MODULE,?LINE,SpecStr,VsnJoscaStr}]),
+dfs([{Name,Vsn}|T],Acc)->
+    io:format("~p~n",[{?MODULE,?LINE,SpecStr,VsnJoscaStr}]),
+    case if_dns:call("catalog",catalog,read,[Type,Name,Vsn]) of
+	{error,Err}->
+	    {error,[?MODULE,?LINE,Err]};
+	       {ok,FileName,JoscaInfo}->
+		   Acc=case Type of 
+			   application->
+			       [];
+			   service ->
+			       Service=josca:services(JoscaInfo),
+			       JoscaFiles=josca:files(JoscaInfo),
+			       io:format("~p~n",[{?MODULE,?LINE,JoscaInfo}]),
+			       Service
+		       end,
+		   io:format("~p~n",[{?MODULE,?LINE,Acc}]),
+		   dfs(JoscaFiles,Acc)
+	   end,
     JoscaInfo=if_dns:call("repo",repo,read_josca_file,[SpecStr,VsnJoscaStr]),
   %  io:format("~p~n",[{?MODULE,?LINE,JoscaInfo}]),
-    Acc1= case josca:services(JoscaInfo) of
+ 
+
+   Acc1= case josca:services(JoscaInfo) of
 	      []-> % App josca file
 		  Acc;
 	      [{ServiceStr,VsnStr}]->

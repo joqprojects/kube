@@ -4,7 +4,7 @@
 %%%
 %%% Created : 10 dec 2012
 %%% -------------------------------------------------------------------
--module(repo).
+-module(catalog).
 
 -behaviour(gen_server).
 
@@ -30,7 +30,8 @@
 
 
 %% External exports
--export([build_artifact/2,update_artifact/1,read_artifact/2,
+-export([create/3,update/3,read/2,delete/2,
+	 all/1,
 	 heart_beat/0
 	 %all_artifacts/1,
 	 
@@ -52,13 +53,18 @@ stop()-> gen_server:call(?MODULE, {stop},infinity).
 
 
 
-build_artifact(ServiceId,EbinDir)->
-    gen_server:call(?MODULE, {build_artifact,ServiceId,EbinDir},infinity).
+create(Name,Vsn,Bin)->
+    gen_server:call(?MODULE, {create,Name,Vsn,Bin},infinity).
 
-update_artifact(Artifact)->
-    gen_server:call(?MODULE, {update_artifact,Artifact},infinity).
-read_artifact(ServiceId,Vsn)-> 
-    gen_server:call(?MODULE, {read_artifact,ServiceId,Vsn},infinity).
+update(Name,Vsn,Bin)->
+    gen_server:call(?MODULE, {update,Name,Vsn,Bin},infinity).
+read(Name,Vsn)-> 
+    gen_server:call(?MODULE, {read,Name,Vsn},infinity).
+delete(Name,Vsn)-> 
+    gen_server:call(?MODULE, {delete,Name,Vsn},infinity).
+all(Name)-> 
+    gen_server:call(?MODULE, {all,Name},infinity).
+
 
 heart_beat()-> 
     gen_server:call(?MODULE, {heart_beat},infinity).
@@ -75,17 +81,16 @@ heart_beat()->
 %%          {stop, Reason}
 %% --------------------------------------------------------------------
 init([]) ->
-    file:delete("glurk.dbase"),   
+    file:delete("glurk_catalog.dbase"),   
     Type=set,
-    DbaseId="glurk.dbase",
+    DbaseId="glurk_catalog.dbase",
     dbase_dets:create_dbase(Type,DbaseId),
 %--- just for test'    
     init_glurk([{"adder","../../ebin/adder_100/ebin"},
 	        {"lib","../../ebin/lib/ebin"},
-		{"dns","../../ebin/dns/ebin"},
-		{"controller","../../ebin/controller/ebin"},
-		{"catalog","../../ebin/catalog/ebin"}		
-	       ]),
+		{"controller","../../ebin/controller/ebin"}
+	       ],
+	      DbaseId),
 %----
     {ok,MyIp}=application:get_env(ip_addr),
     {ok,Port}=application:get_env(port),
@@ -111,18 +116,24 @@ init([]) ->
 %%          {stop, Reason, Reply, State}   | (terminate/2 is called)
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
-handle_call({build_artifact,ServiceId,EbinDir}, _From, State) ->
-    Reply=rpc:call(node(),repo_lib,build_artifact,[ServiceId,EbinDir]),
+handle_call({all,Name}, _From, State) ->
+    Reply=rpc:call(node(),catalog_lib,all,[Name,State#state.dbase_id]),
     {reply, Reply, State};
 
-handle_call({update_artifact,Artifact}, _From, State) ->
-    DbaseId=State#state.dbase_id,
-    Reply=rpc:call(node(),repo_lib,update_artifact,[Artifact,DbaseId]),
+handle_call({create,Name,Vsn,Bin}, _From, State) ->
+    Reply=rpc:call(node(),catalog_lib,create,[Name,Vsn,Bin,State#state.dbase_id]),
     {reply, Reply, State};
 
-handle_call({read_artifact,ServiceId,Vsn}, _From, State) ->
-    DbaseId=State#state.dbase_id,
-    Reply=rpc:call(node(),repo_lib,read_artifact,[ServiceId,Vsn,DbaseId]),
+handle_call({read,Name,Vsn}, _From, State) ->
+    Reply=rpc:call(node(),catalog_lib,read,[Name,Vsn,State#state.dbase_id]),
+    {reply, Reply, State};
+	      
+handle_call({update,Name,Vsn,Bin}, _From, State) ->
+    Reply=rpc:call(node(),catalog_lib,update,[Name,Vsn,Bin,State#state.dbase_id]),
+    {reply, Reply, State};
+
+handle_call({delete,Name,Vsn}, _From, State) ->
+    Reply=rpc:call(node(),catalog_lib,delete,[Name,Vsn,State#state.dbase_id]),
     {reply, Reply, State};
 
 
@@ -195,14 +206,13 @@ local_heart_beat(Interval)->
 %% Purpose: Convert process state when code is changed
 %% Returns: {ok, NewState}
 %% --------------------------------------------------------------------
-init_glurk([])->
+init_glurk([],_)->
     ok;
-init_glurk([{ServiceId,Ebin}|T])->
-    case repo_lib:build_artifact(ServiceId,Ebin) of
-	{ok,Artifact}->
-	    {ok,artifact_updated}=repo_lib:update_artifact(Artifact,"glurk.dbase");
-	Err ->
-	       io:format("Error ~p~n",[{?MODULE,?LINE,ServiceId,Ebin,Err}])
-    end,
-    init_glurk(T).
-    
+init_glurk([{ServiceId,Ebin}|T],DbaseId)->
+    BaseName=ServiceId++".josca",
+    FileName=filename:join(Ebin,BaseName),
+    {ok,L}=file:consult(FileName),
+    {vsn,Vsn}=lists:keyfind(vsn,1,L),
+    {ok,Binary}=file:read_file(FileName),
+    io:format("~p~n",[{?MODULE,?LINE,catalog_lib:create(ServiceId,Vsn,Binary,DbaseId)}]),
+    init_glurk(T,DbaseId).

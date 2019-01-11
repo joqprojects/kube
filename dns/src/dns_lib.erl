@@ -35,7 +35,7 @@
 %% Returns: non
 %% --------------------------------------------------------------------
 dns_register(DnsInfo, DnsList) ->
-    TimeStamp=erlang:timestamp(),
+   TimeStamp=erlang:now(),
     NewDnsInfo=DnsInfo#dns_info{time_stamp=TimeStamp},
     #dns_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn}=DnsInfo,
     
@@ -49,6 +49,7 @@ de_dns_register(DnsInfo,DnsList)->
     NewDnsList=[X||X<-DnsList,false==({IpAddr,Port,ServiceId,Vsn}==
 				  {X#dns_info.ip_addr,X#dns_info.port,X#dns_info.service_id,X#dns_info.vsn})],
     NewDnsList.
+
 
 %% --------------------------------------------------------------------
 %% Function: 

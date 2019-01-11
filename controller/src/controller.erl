@@ -236,7 +236,7 @@ handle_call(Request, From, State) ->
 %% --------------------------------------------------------------------
 
 handle_cast({dns_register,DnsInfo}, State) ->
-    TimeStamp=erlang:timestamp(),
+    TimeStamp=erlang:now(),
     NewDnsInfo=DnsInfo#dns_info{time_stamp=TimeStamp},
     #dns_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn}=DnsInfo,
     
@@ -255,7 +255,7 @@ handle_cast({de_dns_register,DnsInfo}, State) ->
     {noreply, NewState};
 
 handle_cast({node_register,KubeletInfo}, State) ->
-    TimeStamp=erlang:timestamp(),
+    TimeStamp=erlang:now(),
     NewKubeletInfo=KubeletInfo#kubelet_info{time_stamp=TimeStamp},
     #kubelet_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn,
 		  max_workers=_MaxWorkers,zone=_Zone,capabilities=_Capabilities

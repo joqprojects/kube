@@ -28,7 +28,7 @@
 %% External functions
 %% ====================================================================
 dns_register(DnsInfo, DnsList) ->
-    TimeStamp=erlang:timestamp(),
+    TimeStamp=erlang:now(),
     NewDnsInfo=DnsInfo#dns_info{time_stamp=TimeStamp},
     #dns_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn}=DnsInfo,
     

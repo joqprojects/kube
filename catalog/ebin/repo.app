@@ -6,7 +6,7 @@
 {modules, 
 	  [if_repo,repo_lib,
 	   repo_app,repo_sup,repo]},
-{registered,[repo]},
+{registered,[template]},
 {applications, [kernel,stdlib]},
 {mod, {repo_app,[]}},
 {start_phases, []}
