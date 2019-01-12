@@ -256,7 +256,7 @@ handle_cast({start_campaign}, State) ->
 %		   }
 % -record(state,{dns_info,dns_list,node_list,application_list}).
     NeededServices=controller_lib:needed_services(State#state.application_list),
-    MissingServices=controller_lib:missing_service(State#state.dns_list),
+    MissingServices=controller_lib:missing_service(NeededServices,State#state.dns_list),
     controller_lib:start_services(MissingServides),
     sleep(10*1000),
     MissingServices=controller_lib:missing_service(State#state.dns_list),

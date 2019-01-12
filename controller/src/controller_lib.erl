@@ -33,12 +33,80 @@
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
+needed_services(Applications)->
+    needed_services(Applications,[]).
+
+needed_services([],NeededServices)->
+    NeededServices;
+needed_services([{Id,Vsn}|T],Acc)->
+    NewAcc=case josca:start_order(Id,Vsn) of
+	       {error,Err}->
+		   io:format("error glurk~p~n",[{?MODULE,?LINE,Err}]),
+		   Acc;
+	       Services ->
+		   case lists:member({Id,Vsn},Acc) of
+		       true->
+			   Acc;
+		       false->
+			   [Services|Acc]
+		   end,
+	   end,
+    needed_services(T,NewAcc).
+
+missing_service(NeededServices,DnsList)->
+    AvailibleServices=[{DnsInfo#dns_info,service_id,DnsInfo#dns_info,vsn}||DnsInfo<-DnsList],
+    [{Id,Vsn}||{Id,Vsn}<-NeededServices, 
+	       lists:member({Id,Vsn},AvailibleServices)=:=false].
+
+
+start_services(MissingServides)->
+    ok.
 
 %% --------------------------------------------------------------------
 %% Function: 
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
+get_nodes_fullfills_needs(WantedZone,WantedCapabilities,AvailibleNodes)->
+    % Which nodes is in needed zone
+    RightZone = case WantedZone of
+		    []->
+			AvailibleNodes;
+		    [Zone] ->
+			[Node||Node<-AvailibleNodes,
+				Node#kubelet_info.zone=:=Zone]
+		end,
+    NodesFullfilledNeeds=case WantedCapabilities of
+			     []->
+				 Zone;
+			     ListNeededCapabilities->
+				 [Node||Node<-RightZone,
+					check_capbility(WantedCapabilities,Node)]
+			 end,
+    
+    NodesFullfilledNeeds.
+
+
+check_capbility(WantedCapabilities,Node)->
+    check_capbility(WantedCapabilities,Node,false).
+    
+check_capbility([],_,Boolean)->
+    Boolean;
+check_capbility([WCap|T],Node,_)->    
+    case lists:member(WCap,Node#kubelet_info.capabilities) of
+	false->
+	    Tail=[],  % Stop searching
+	    R=false;  % Failed
+	true->
+	    Tail=T,   % Continue search
+	    R=true    % Succeded 
+    end,
+    check_capbility(Tail,Node,R).    
+	   
+				
+    % Which nodes in needed zone has the right capabilities
+
+
 
 %% --------------------------------------------------------------------
 %% Function: 
@@ -141,30 +209,6 @@ stop_service([ServiceInitArgs|T],InitArgs,Acc)->
 get_all_applications(ApplicationList)->
     
     ApplicationList.
-
-%% --------------------------------------------------------------------
-%% Function: 
-%% Description:
-%% Returns: non
-%% --------------------------------------------------------------------
-register(InitArgs, ServiceList) ->
-    Elem=[{TimeStamp,ServiceInfoElem}||{TimeStamp,ServiceInfoElem}<-ServiceList,
-				   InitArgs==ServiceInfoElem
-	 ],			   
-    NewServiceList=case Elem of
-		   [] ->
-			[{erlang:timestamp(),InitArgs}|ServiceList];
-		   [{_,ServiceInfoElem}] ->
-		       lists:keyreplace(ServiceInfoElem,2,ServiceList,{erlang:timestamp(),ServiceInfoElem})
-		end,
-    NewServiceList.
-
-
-de_register(InitArgs, ServiceList)->
-    NewServiceList=[{TimeStamp,ServiceInfo}||{TimeStamp,ServiceInfo}<-ServiceList,
-				      (ServiceInfo==InitArgs)==false
-	       ],
-    NewServiceList.
 
 
 %% --------------------------------------------------------------------
