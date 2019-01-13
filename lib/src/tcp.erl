@@ -15,19 +15,55 @@
 %% --------------------------------------------------------------------
 %% Definitions
 %% --------------------------------------------------------------------
+-include("kube/include/trace_debug.hrl").
 -include("kube/include/tcp.hrl").
 -include("certificate/cert.hrl").
+
 %% --------------------------------------------------------------------
 
 %% --------------------------------------------------------------------
 %% External exports
 %% --------------------------------------------------------------------
--export([call/3,cast/3,server_seq/1,server_parallel/1,par_connect/1]).
+-export([call/4,call/3,cast/3,server_seq/1,server_parallel/1,par_connect/1]).
 
 
 %%
 %% API Function
 %%
+% call(RecIpAddr,RecPort,{M,F,A},{SenderIpAddr,SenderPort,SenderModule,SenderLine})->
+call(IpAddr,Port,{os,cmd,A},SenderInfo)->
+    send_call(IpAddr,Port,[call,{?KEY_M_OS_CMD,?KEY_F_OS_CMD,A},?KEY_MSG],SenderInfo);
+
+call(IpAddr,Port,{M,F,A},SenderInfo)->
+    send_call(IpAddr,Port,[{M,F,A},?KEY_MSG],SenderInfo).
+
+send_call(Addr,Port,Msg,SenderInfo)->
+    case gen_tcp:connect(Addr,Port,?CLIENT_SETUP) of
+	{ok,Socket}->
+	  %  io:format("ok Socket  ~p~n",[{?MODULE,?LINE,Addr,Port,Msg,inet:socknames(Socket)}]),
+	    ok=gen_tcp:send(Socket,term_to_binary(Msg)),
+	    receive
+		{tcp,Socket,Bin}->
+		    Result=binary_to_term(Bin),
+		    %io:format("send Result ~p~n",[{?MODULE,?LINE,Result,inet:socknames(Socket)}]),	    
+		    gen_tcp:close(Socket);
+		{error,Err} ->
+		    io:format("send error ~p~n",[{?MODULE,?LINE,Err,Addr,Port,Msg}]),
+		    Result={error,[?MODULE,?LINE,Err,SenderInfo]},
+		    gen_tcp:close(Socket)
+	    after ?TIMEOUT_TCPCLIENT ->
+		    io:format("send error ~p~n",[{?MODULE,?LINE,time_out,Addr,Port,Msg,SenderInfo}]),
+		    Result={error,[?MODULE,?LINE,tcp_timeout,Addr,Port,Msg,SenderInfo]},
+		    gen_tcp:close(Socket)
+	    end;
+	{error,Err} ->
+	    io:format("send error ~p~n",[{?MODULE,?LINE,Err,Addr,Port,Msg,SenderInfo}]),
+	    Result={error,{Err,?MODULE,?LINE}}
+    end,	
+    Result.
+
+%%------------------------------------------------------------------------------------------------    
+    
 
 call(IpAddr,Port,{os,cmd,A})->
     send_call(IpAddr,Port,[call,{?KEY_M_OS_CMD,?KEY_F_OS_CMD,A},?KEY_MSG]);

@@ -68,9 +68,9 @@ missing_services(NeededServices,DnsList)->
 
 start_services([],Nodes)->
     ok;
-start_services([{ServicesId,Vsn}|T],Nodes)->
+start_services([{ServiceId,Vsn}|T],Nodes)->
  %   io:format("~p~n",[{?MODULE,?LINE,ServicesId,Vsn,Nodes}]),
-    case if_dns:call("catalog",catalog,read,[ServicesId,Vsn]) of
+    case if_dns:call("catalog",catalog,read,[ServiceId,Vsn]) of
 	{error,Err}->
 	    io:format("~p~n",[{?MODULE,?LINE,'error',Err}]);
 	{ok,_,JoscaInfo}->
@@ -78,9 +78,31 @@ start_services([{ServicesId,Vsn}|T],Nodes)->
 	    {zone,WantedZone}=lists:keyfind(zone,1,JoscaInfo),
 	    {needed_capabilities,WantedCapabilities}=lists:keyfind(needed_capabilities,1,JoscaInfo),
 	    NodesFullfilledNeeds=get_nodes_fullfills_needs(WantedZone,WantedCapabilities,Nodes),
-	    io:format("~p~n",[{?MODULE,?LINE,ServicesId,WantedZone,WantedCapabilities,'=>>',NodesFullfilledNeeds}])
+	 %   io:format("~p~n",[{?MODULE,?LINE,ServiceId,WantedZone,WantedCapabilities,'=>>',NodesFullfilledNeeds}]),
+	    case NodesFullfilledNeeds of
+		[]->
+		    io:format("~p~n",[{?MODULE,?LINE,'error no availible nodes'}]);
+		NodesFullfilledNeeds->
+		    R=schedule_start(ServiceId,Vsn,NodesFullfilledNeeds),
+		    io:format("~p~n",[{?MODULE,?LINE,'Service start result =',R,ServiceId,Vsn}])
+	    end
     end,
     start_services(T,Nodes).
+
+%% --------------------------------------------------------------------
+%% Function: 
+%% Description:
+%% Returns: non
+%% --------------------------------------------------------------------
+schedule_start(ServicesId,Vsn,NodesFullfilledNeeds)->
+    [KubeleteInfo|_]=NodesFullfilledNeeds,
+    IpAddr=KubeleteInfo#kubelet_info.ip_addr,
+    Port=KubeleteInfo#kubelet_info.port,
+
+    R=tcp:call(IpAddr,Port,{kubelet,start_service,[ServicesId,Vsn]}),
+    R.
+
+
 
 %% --------------------------------------------------------------------
 %% Function: 

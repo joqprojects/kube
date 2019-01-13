@@ -231,8 +231,10 @@ handle_call({heart_beat}, _From, State) ->
 		      (timer:now_diff(Now,KubeletInfo#kubelet_info.time_stamp)/1000)<?INACITIVITY_TIMEOUT],
     
     NewState=State#state{dns_list=NewDnsList,node_list=NewNodeList},
+  %  io:format(" ~p~n",[{time(),'before campaign',?MODULE,?LINE}]),
     rpc:call(node(),controller,campaign,[]),
-    Reply=ok,
+   % io:format(" ~p~n",[{time(),'after campaign',?MODULE,?LINE}]),   
+Reply=ok,
    {reply, Reply,NewState};
     
 
@@ -272,7 +274,7 @@ handle_cast({campaign}, State) ->
 %		   }
 % -record(state,{dns_info,dns_list,node_list,application_list}).
     NeededServices=rpc:call(node(),controller_lib,needed_services,[State#state.application_list]),
-    io:format("NeededServices ~p~n",[{?MODULE,?LINE,NeededServices}]),
+%    io:format("NeededServices ~p~n",[{?MODULE,?LINE,NeededServices}]),
     MissingServices=rpc:call(node(),controller_lib,missing_services,[NeededServices,State#state.dns_list]),
     io:format("MissingServices ~p~n",[{?MODULE,?LINE,MissingServices}]),
     rpc:call(node(),controller_lib,start_services,[MissingServices,State#state.node_list]),
@@ -289,6 +291,10 @@ handle_cast({campaign}, State) ->
 
 
 handle_cast({dns_register,DnsInfo}, State) ->
+    Service=DnsInfo#dns_info.service_id,
+    Ip=DnsInfo#dns_info.ip_addr,
+    P=DnsInfo#dns_info.port,
+    io:format("~p~n",[{time(),Service,Ip,P,?MODULE,?LINE}]),
     TimeStamp=erlang:now(),
     NewDnsInfo=DnsInfo#dns_info{time_stamp=TimeStamp},
     #dns_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn}=DnsInfo,
@@ -308,6 +314,11 @@ handle_cast({de_dns_register,DnsInfo}, State) ->
     {noreply, NewState};
 
 handle_cast({node_register,KubeletInfo}, State) ->
+    Service=KubeletInfo#kubelet_info.service_id,
+    Ip=KubeletInfo#kubelet_info.ip_addr,
+    P=KubeletInfo#kubelet_info.port,
+    io:format("~p~n",[{time(),Service,Ip,P,?MODULE,?LINE}]),
+
     TimeStamp=erlang:now(),
     NewKubeletInfo=KubeletInfo#kubelet_info{time_stamp=TimeStamp},
     #kubelet_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn,

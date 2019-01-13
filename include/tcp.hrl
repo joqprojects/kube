@@ -2,5 +2,5 @@
 -define (CLIENT_SETUP,[binary, {packet,4}]).
 -define (NUM_CONNECT_TRIES,100).
 -define (MAX_CONNECT_TIME ,3000).
--define (TIMEOUT_TCPCLIENT, 1*60*1000).
--define(CALL_TIMEOUT, 1*60*1000).
+-define (TIMEOUT_TCPCLIENT, 1*20*1000).
+-define(CALL_TIMEOUT, 1*20*1000).

@@ -11,6 +11,7 @@
 %% --------------------------------------------------------------------
 %% Include files
 %% --------------------------------------------------------------------
+-include("kube/include/trace_debug.hrl").
 -include("kube/include/tcp.hrl").
 -include("certificate/cert.hrl").
 -include("kube/include/dns.hrl").
@@ -96,8 +97,8 @@ heart_beat()->
 %% --------------------------------------------------------------------
 init([]) ->
     {ok,InitialInfo}=file:consult("kubelet.config"),
-    {ip_addr,MyIp}=lists:keyfind(ip_addr,1,InitialInfo),
-    {port,Port}=lists:keyfind(port,1,InitialInfo),
+    {ip_addr,NodeIp}=lists:keyfind(ip_addr,1,InitialInfo),
+    {port,NodePort}=lists:keyfind(port,1,InitialInfo),
     {service_id,ServiceId}=lists:keyfind(service_id,1,InitialInfo),
     {vsn,Vsn}=lists:keyfind(vsn,1,InitialInfo),
     {max_workers,MaxWorkers}=lists:keyfind(max_workers,1,InitialInfo),
@@ -107,19 +108,23 @@ init([]) ->
     KubeletInfo=#kubelet_info{time_stamp="not_initiaded_time_stamp",
 			service_id = ServiceId,
 			vsn = Vsn,
-			ip_addr=MyIp,
-			port=Port,
+			ip_addr=NodeIp,
+			port=NodePort,
 			max_workers=MaxWorkers,
 			zone=Zone,
 			capabilities=Capabilities
 		       },    
-    Result=rpc:call(node(),kubelet_lib,load_start_pre_loaded_apps,[PreLoadApps,MyIp,Port]),
+    _Result=rpc:call(node(),kubelet_lib,load_start_pre_loaded_apps,[PreLoadApps,NodeIp,NodePort]),
   %  StartedApps=[{ServiceId_X,Vsn_X}||{ServiceId_X,Vsn_X,ok}<-Result],
-    {ok, LSock} = gen_tcp:listen(Port,?SERVER_SETUP),
+    {ok, LSock} = gen_tcp:listen(NodePort,?SERVER_SETUP),
     Workers=init_workers(LSock,MaxWorkers,[]), % Glurk remove?
 
     %------ send info to controller
-    if_dns:call("controller",controller,node_register,[KubeletInfo]),
+    
+    SenderInfo=#sender_info{ip_addr=NodeIp,
+			    port=NodePort,
+			    module=?MODULE,line=?LINE},
+    if_dns:call("controller",controller,node_register,[KubeletInfo],SenderInfo),
     spawn(fun()-> local_heart_beat(?HEARTBEAT_INTERVAL) end), 
     io:format("Started Service  ~p~n",[{?MODULE}]),
     {ok, #state{kubelet_info=KubeletInfo,
@@ -203,9 +208,15 @@ handle_call({heart_beat}, _From, State) ->
 		      (timer:now_diff(Now,DnsInfo#dns_info.time_stamp)/1000)<?INACITIVITY_TIMEOUT],
 
     % Send services registration to Controller
-    [if_dns:call("controller",controller,dns_register,[DnsInfo])||DnsInfo<-NewDnsList],
+    NodeInfo=State#state.kubelet_info,
+    NodeIp=NodeInfo#kubelet_info.ip_addr,
+    NodePort=NodeInfo#kubelet_info.port,
+    SenderInfo=#sender_info{ip_addr=NodeIp,
+			    port=NodePort,
+			    module=?MODULE,line=?LINE},
+    [rpc:cast(node(),if_dns,call,["controller",controller,dns_register,[DnsInfo],SenderInfo])||DnsInfo<-NewDnsList],
     % Register node
-    if_dns:call("controller",controller,node_register,[State#state.kubelet_info]),
+    rpc:cast(node(),if_dns,call,["controller",controller,node_register,[State#state.kubelet_info],SenderInfo]),
     NewState=State#state{dns_list=NewDnsList},
     Reply=ok,
    {reply, Reply, NewState};
