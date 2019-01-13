@@ -87,8 +87,15 @@ init([]) ->
     dbase_dets:create_dbase(Type,DbaseId),
 %--- just for test'    
     init_glurk([{"adder","../../ebin/adder_100/ebin"},
+		{"divider","../../ebin/divider_100/ebin"},
+		{"subtract","../../ebin/subtract_100/ebin"},
+		{"multi","../../ebin/multi_100/ebin"},
 	        {"lib","../../ebin/lib/ebin"},
 		{"controller","../../ebin/controller/ebin"},
+		{"app_adder","../../applications"},
+		{"app_divider","../../applications"},
+		{"app_subtract","../../applications"},
+		{"app_multi","../../applications"},
 		{"mymath","../../applications"}
 	       ],
 	      DbaseId),
@@ -215,5 +222,5 @@ init_glurk([{ServiceId,Ebin}|T],DbaseId)->
     {ok,JoscaInfo}=file:consult(FileName),
     {vsn,Vsn}=lists:keyfind(vsn,1,JoscaInfo),
    % {ok,Binary}=file:read_file(FileName),
-    io:format("~p~n",[{?MODULE,?LINE,catalog_lib:create(ServiceId,Vsn,JoscaInfo,DbaseId)}]),
+    io:format("~p~n",[{?MODULE,?LINE,ServiceId,catalog_lib:create(ServiceId,Vsn,JoscaInfo,DbaseId)}]),
     init_glurk(T,DbaseId).

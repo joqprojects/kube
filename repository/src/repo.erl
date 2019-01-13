@@ -81,6 +81,9 @@ init([]) ->
     dbase_dets:create_dbase(Type,DbaseId),
 %--- just for test'    
     init_glurk([{"adder","../../ebin/adder_100/ebin"},
+		{"divider","../../ebin/divider_100/ebin"},
+		{"subtract","../../ebin/subtract_100/ebin"},
+		{"multi","../../ebin/multi_100/ebin"},
 	        {"lib","../../ebin/lib/ebin"},
 		{"dns","../../ebin/dns/ebin"},
 		{"controller","../../ebin/controller/ebin"},
@@ -198,9 +201,15 @@ local_heart_beat(Interval)->
 init_glurk([])->
     ok;
 init_glurk([{ServiceId,Ebin}|T])->
+   io:format(" ~p~n",[{?MODULE,?LINE,ServiceId,Ebin}]),
     case repo_lib:build_artifact(ServiceId,Ebin) of
 	{ok,Artifact}->
-	    {ok,artifact_updated}=repo_lib:update_artifact(Artifact,"glurk.dbase");
+	    case repo_lib:update_artifact(Artifact,"glurk.dbase") of
+		{ok,artifact_updated}->
+		    ok;
+		Err->
+		    io:format("Error ~p~n",[{?MODULE,?LINE,ServiceId,Ebin,Err}])
+	    end;  
 	Err ->
 	       io:format("Error ~p~n",[{?MODULE,?LINE,ServiceId,Ebin,Err}])
     end,

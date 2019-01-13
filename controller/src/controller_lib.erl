@@ -33,34 +33,54 @@
 %% Description:
 %% Returns: non
 %% --------------------------------------------------------------------
-needed_services(Applications)->
-    needed_services(Applications,[]).
+needed_services(ApplicationList)->
+    needed_services(ApplicationList,[]).
 
 needed_services([],NeededServices)->
     NeededServices;
-needed_services([{Id,Vsn}|T],Acc)->
+needed_services([{{AppId,Vsn},JoscaFile}|T],Acc)->
+    {dependencies,ServiceList}=lists:keyfind(dependencies,1,JoscaFile),
+    NewAcc=check_services(ServiceList,Acc),
+    needed_services(T,NewAcc).
+
+check_services([],Acc)->
+    Acc;
+check_services([{Id,Vsn}|T],Acc) ->
     NewAcc=case josca:start_order(Id,Vsn) of
 	       {error,Err}->
-		   io:format("error glurk~p~n",[{?MODULE,?LINE,Err}]),
+		   io:format("error~p~n",[{?MODULE,?LINE,Err}]),
 		   Acc;
 	       Services ->
 		   case lists:member({Id,Vsn},Acc) of
 		       true->
 			   Acc;
 		       false->
-			   [Services|Acc]
-		   end,
+			   lists:append(Services,Acc)
+		   end
 	   end,
-    needed_services(T,NewAcc).
+    check_services(T,NewAcc).
 
-missing_service(NeededServices,DnsList)->
-    AvailibleServices=[{DnsInfo#dns_info,service_id,DnsInfo#dns_info,vsn}||DnsInfo<-DnsList],
+missing_services(NeededServices,DnsList)->
+    AvailibleServices=[{DnsInfo#dns_info.service_id,DnsInfo#dns_info.vsn}||DnsInfo<-DnsList],
     [{Id,Vsn}||{Id,Vsn}<-NeededServices, 
 	       lists:member({Id,Vsn},AvailibleServices)=:=false].
 
 
-start_services(MissingServides)->
-    ok.
+start_services([],Nodes)->
+    ok;
+start_services([{ServicesId,Vsn}|T],Nodes)->
+ %   io:format("~p~n",[{?MODULE,?LINE,ServicesId,Vsn,Nodes}]),
+    case if_dns:call("catalog",catalog,read,[ServicesId,Vsn]) of
+	{error,Err}->
+	    io:format("~p~n",[{?MODULE,?LINE,'error',Err}]);
+	{ok,_,JoscaInfo}->
+%	    io:format("~p~n",[{?MODULE,?LINE,JoscaInfo}]),
+	    {zone,WantedZone}=lists:keyfind(zone,1,JoscaInfo),
+	    {needed_capabilities,WantedCapabilities}=lists:keyfind(needed_capabilities,1,JoscaInfo),
+	    NodesFullfilledNeeds=get_nodes_fullfills_needs(WantedZone,WantedCapabilities,Nodes),
+	    io:format("~p~n",[{?MODULE,?LINE,ServicesId,WantedZone,WantedCapabilities,'=>>',NodesFullfilledNeeds}])
+    end,
+    start_services(T,Nodes).
 
 %% --------------------------------------------------------------------
 %% Function: 
@@ -72,14 +92,16 @@ get_nodes_fullfills_needs(WantedZone,WantedCapabilities,AvailibleNodes)->
     RightZone = case WantedZone of
 		    []->
 			AvailibleNodes;
-		    [Zone] ->
+		    Zone ->
+		%	io:format("Zone=  ~p~n",[{?MODULE,?LINE,Zone}]), 
 			[Node||Node<-AvailibleNodes,
 				Node#kubelet_info.zone=:=Zone]
 		end,
+   % io:format("RightZone  ~p~n",[{?MODULE,?LINE,RightZone}]),    
     NodesFullfilledNeeds=case WantedCapabilities of
 			     []->
-				 Zone;
-			     ListNeededCapabilities->
+				 RightZone;
+			     WantedCapabilities->
 				 [Node||Node<-RightZone,
 					check_capbility(WantedCapabilities,Node)]
 			 end,

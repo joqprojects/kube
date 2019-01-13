@@ -61,8 +61,9 @@
 -record(state,{dns_info,dns_list,node_list,application_list}).
 %%---------------------------------------------------------------------
 
--export([
-	 start_application/2,stop_application/2,% get_services/0,
+-export([campaign/0,
+	 add/2,remove/2,
+%	 start_application/2,stop_application/2,% get_services/0,
 	 get_all_applications/0,get_all_services/0,
 	 all_nodes/0,
 	 dns_register/1,de_dns_register/1,
@@ -105,22 +106,16 @@ get_all_applications()->
 
 get_all_services()->
     gen_server:call(?MODULE, {get_all_services},infinity).
-
-start_application(AppId,Vsn)->
-    gen_server:call(?MODULE, {start_application,AppId,Vsn},infinity).
-stop_application(AppId,Vsn)->
-    gen_server:call(?MODULE, {stop_application,AppId,Vsn},infinity).
-    
-
     
 %%-----------------------------------------------------------------------
-start_campaign()->
-    gen_server:call(?MODULE, {start_campaign},infinity).     
+    
 add(AppId,Vsn)->
     gen_server:call(?MODULE, {add,AppId,Vsn},infinity).  
 remove(AppId,Vsn)->
     gen_server:call(?MODULE, {remove,AppId,Vsn},infinity). 
 %%-----------------------------------------------------------------------
+campaign()->
+    gen_server:cast(?MODULE, {campaign}).
 node_register(KubeletInfo)->
     gen_server:cast(?MODULE, {node_register,KubeletInfo}).
 de_node_register(KubeletInfo)->
@@ -171,13 +166,33 @@ init([]) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
 handle_call({add,AppId,Vsn}, _From, State) ->
-    Reply={AppId,Vsn},
-    NewState=State,
+    Reply=case lists:keyfind({AppId,Vsn},1,State#state.application_list) of
+	      false->
+		  case if_dns:call("catalog",catalog,read,[AppId,Vsn]) of
+		      {error,Err}->
+			  NewState=State,
+			  {error,[?MODULE,?LINE,AppId,Vsn,Err]};
+		      {ok,_,JoscaInfo}->
+			  NewAppList=[{{AppId,Vsn},JoscaInfo}|State#state.application_list],
+			  NewState=State#state{application_list=NewAppList},
+			  ok
+		  end;
+	      _->
+		  NewState=State,
+		  {error,[?MODULE,?LINE,'already exists',AppId,Vsn]}
+	  end,
     {reply, Reply,NewState};
 
-handle_call({remove,Id,Vsn}, _From, State)->
-    Reply={Id,Vsn},
-    NewState=State,
+handle_call({remove,AppId,Vsn}, _From, State)->
+    Reply=case lists:keyfind({AppId,Vsn},1,State#state.application_list) of
+	      false ->
+		  NewState=State,
+		  {error,[?MODULE,?LINE,'eexists',AppId,Vsn]};
+	      _->
+		  NewAppList=lists:keydelete({AppId,Vsn},1,State#state.application_list),
+		  NewState=State#state{application_list=NewAppList},
+		  ok
+	  end,
     {reply, Reply,NewState};
 
 handle_call({get_all_applications},_From, State) ->
@@ -216,6 +231,7 @@ handle_call({heart_beat}, _From, State) ->
 		      (timer:now_diff(Now,KubeletInfo#kubelet_info.time_stamp)/1000)<?INACITIVITY_TIMEOUT],
     
     NewState=State#state{dns_list=NewDnsList,node_list=NewNodeList},
+    rpc:call(node(),controller,campaign,[]),
     Reply=ok,
    {reply, Reply,NewState};
     
@@ -231,7 +247,7 @@ handle_call({stop}, _From, State) ->
 
 handle_call(Request, From, State) ->
     Reply = {unmatched_signal,?MODULE,Request,From},
-    if_log:call(State#state.dns_info,error,[?MODULE,?LINE,'unmatched signal',Request]),
+    %if_log:call(State#state.dns_info,error,[?MODULE,?LINE,'unmatched signal',Request]),
     {reply, Reply, State}.
 
 %% --------------------------------------------------------------------
@@ -241,7 +257,7 @@ handle_call(Request, From, State) ->
 %%          {noreply, State, Timeout} |
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
-handle_cast({start_campaign}, State) ->
+handle_cast({campaign}, State) ->
 %    NeededServices:[{{app,AppId,Vsn},{service,Id,Vsn}}] Based on wanted applications get all needed services 
 %    MissingServices: Check which services are mssing  working  
 %    WorkingServices: DnsInfo
@@ -255,11 +271,13 @@ handle_cast({start_campaign}, State) ->
 %		   not_working=[{AppID,Vsn}]
 %		   }
 % -record(state,{dns_info,dns_list,node_list,application_list}).
-    NeededServices=controller_lib:needed_services(State#state.application_list),
-    MissingServices=controller_lib:missing_service(State#state.dns_list),
-    controller_lib:start_services(MissingServides),
-    sleep(10*1000),
-    MissingServices=controller_lib:missing_service(State#state.dns_list),
+    NeededServices=rpc:call(node(),controller_lib,needed_services,[State#state.application_list]),
+    io:format("NeededServices ~p~n",[{?MODULE,?LINE,NeededServices}]),
+    MissingServices=rpc:call(node(),controller_lib,missing_services,[NeededServices,State#state.dns_list]),
+    io:format("MissingServices ~p~n",[{?MODULE,?LINE,MissingServices}]),
+    rpc:call(node(),controller_lib,start_services,[MissingServices,State#state.node_list]),
+   % timer:sleep(10*1000),
+   % MissingServices=rpc:call(node(),controller_lib,missing_services,[NeededServices,State#state.dns_list]),
     % For each wanted_state check following
     %  1. Is the application deployed, if not (added after latest campaign) -> App to be started
     %  2. If deployed: Check if all services are availible , if not -> Service to be started

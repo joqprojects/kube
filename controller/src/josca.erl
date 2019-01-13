@@ -104,7 +104,7 @@ dependencies(I)->
 
 
 start_order(Name,Vsn)->
-    io:format("~p~n",[{?MODULE,?LINE,Name,Vsn}]),
+  %  io:format("~p~n",[{?MODULE,?LINE,Name,Vsn}]),
     Result=case if_dns:call("catalog",catalog,read,[Name,Vsn]) of
 	       {error,Err}->
 		   {error,[?MODULE,?LINE,Err]};
@@ -116,9 +116,9 @@ start_order(Name,Vsn)->
 			       {exported_services,[{ServiceId,VsnService}]}=lists:keyfind(exported_services,1,JoscaInfo),
 			       [{ServiceId,VsnService}]
 		       end,
-		   io:format("~p~n",[{?MODULE,?LINE,Acc}]),
+		  % io:format("~p~n",[{?MODULE,?LINE,Acc}]),
 		   {dependencies,JoscaFiles}=lists:keyfind(dependencies,1,JoscaInfo),
-		   io:format("~p~n",[{?MODULE,?LINE,JoscaFiles}]),
+		  % io:format("~p~n",[{?MODULE,?LINE,JoscaFiles}]),
 		   dfs(JoscaFiles,Acc)
 	   end,
     Result.
