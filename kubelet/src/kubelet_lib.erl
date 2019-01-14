@@ -133,7 +133,8 @@ stop_unload_app(DnsInfo)->
     Appfile=filename:join(Ebin,AppFileBaseName),
     ok=file:delete(Appfile),
     DeleteResult=[file:delete(filename:join(Ebin,ModuleName))||{ModuleName,_}<-Modules], 
-    if_dns:call("dns",dns,de_dns_register,[DnsInfo]),
+    rpc:cast(node(),if_dns,call,["dns",dns,de_dns_register,[DnsInfo]]),
+    rpc:cast(node(),if_dns,call,["controller",dns,de_dns_register,[DnsInfo]]),
     Reply=case [Y||Y<-DeleteResult,false=={Y=:=ok}] of
 	      []->
 		  ok;

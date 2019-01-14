@@ -188,8 +188,17 @@ handle_call({remove,AppId,Vsn}, _From, State)->
 	      false ->
 		  NewState=State,
 		  {error,[?MODULE,?LINE,'eexists',AppId,Vsn]};
-	      _->
+	      {{AppId,Vsn},JoscaInfo}->
 		  NewAppList=lists:keydelete({AppId,Vsn},1,State#state.application_list),
+		%  io:format("NewAppList ~p~n",[{time(),NewAppList,?MODULE,?LINE}]),
+		  AllServices=rpc:call(node(),controller_lib,needed_services,[NewAppList]),
+		%  io:format("AllServices ~p~n",[{time(),AllServices,?MODULE,?LINE}]),
+		  AppIdServices=rpc:call(node(),controller_lib,needed_services,[[{{AppId,Vsn},JoscaInfo}]]),
+		%  io:format("AppIdServices ~p~n",[{time(),AppIdServices,?MODULE,?LINE}]),
+		  ServicesToStop=[{ServiceId,Vsn}||{ServiceId,Vsn}<-AppIdServices,
+						   false==lists:member({ServiceId,Vsn},AllServices)],
+		 % io:format("ServicesToStop ~p~n",[{time(),ServicesToStop,?MODULE,?LINE}]),
+		  rpc:call(node(),controller_lib,stop_services,[ServicesToStop,State#state.dns_list]),
 		  NewState=State#state{application_list=NewAppList},
 		  ok
 	  end,
@@ -260,41 +269,19 @@ handle_call(Request, From, State) ->
 %%          {stop, Reason, State}            (terminate/2 is called)
 %% --------------------------------------------------------------------
 handle_cast({campaign}, State) ->
-%    NeededServices:[{{app,AppId,Vsn},{service,Id,Vsn}}] Based on wanted applications get all needed services 
-%    MissingServices: Check which services are mssing  working  
-%    WorkingServices: DnsInfo
-%    WorkingApplications 
-%    Start the ones missing 
-%    
- %   #app_status{app_id=AppId,vsn=Vsn,needed_services=[{ServiceId,Vsn}],status=not_working},
-%    #service_status{service_id=AppId,vsn=Vsn,dns_info=DnsInfo,status=not_working},
- %   #campaign_info{wanted_state=[{AppID,Vsn}],
-%		   working=[{AppID,Vsn}],
-%		   not_working=[{AppID,Vsn}]
-%		   }
-% -record(state,{dns_info,dns_list,node_list,application_list}).
     NeededServices=rpc:call(node(),controller_lib,needed_services,[State#state.application_list]),
 %    io:format("NeededServices ~p~n",[{?MODULE,?LINE,NeededServices}]),
     MissingServices=rpc:call(node(),controller_lib,missing_services,[NeededServices,State#state.dns_list]),
-    io:format("MissingServices ~p~n",[{?MODULE,?LINE,MissingServices}]),
+  %  io:format("MissingServices ~p~n",[{?MODULE,?LINE,MissingServices}]),
     rpc:call(node(),controller_lib,start_services,[MissingServices,State#state.node_list]),
-   % timer:sleep(10*1000),
-   % MissingServices=rpc:call(node(),controller_lib,missing_services,[NeededServices,State#state.dns_list]),
-    % For each wanted_state check following
-    %  1. Is the application deployed, if not (added after latest campaign) -> App to be started
-    %  2. If deployed: Check if all services are availible , if not -> Service to be started
-    %  3 Check if {AppId,Vsn} is removed after last campaign, if stop services and remove app
-    %  4 . REport current status Apps working and Apps not_working and why  
-    NewState=State,
-    {noreply, NewState};
-
+    {noreply, State};
 
 
 handle_cast({dns_register,DnsInfo}, State) ->
     Service=DnsInfo#dns_info.service_id,
     Ip=DnsInfo#dns_info.ip_addr,
     P=DnsInfo#dns_info.port,
-    io:format("~p~n",[{time(),Service,Ip,P,?MODULE,?LINE}]),
+ %   io:format("~p~n",[{time(),Service,Ip,P,?MODULE,?LINE}]),
     TimeStamp=erlang:now(),
     NewDnsInfo=DnsInfo#dns_info{time_stamp=TimeStamp},
     #dns_info{time_stamp=_,ip_addr=IpAddr,port=Port,service_id=ServiceId,vsn=Vsn}=DnsInfo,
@@ -317,7 +304,7 @@ handle_cast({node_register,KubeletInfo}, State) ->
     Service=KubeletInfo#kubelet_info.service_id,
     Ip=KubeletInfo#kubelet_info.ip_addr,
     P=KubeletInfo#kubelet_info.port,
-    io:format("~p~n",[{time(),Service,Ip,P,?MODULE,?LINE}]),
+  %  io:format("~p~n",[{time(),Service,Ip,P,?MODULE,?LINE}]),
 
     TimeStamp=erlang:now(),
     NewKubeletInfo=KubeletInfo#kubelet_info{time_stamp=TimeStamp},
