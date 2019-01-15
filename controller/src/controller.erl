@@ -272,7 +272,12 @@ handle_cast({campaign}, State) ->
     NeededServices=rpc:call(node(),controller_lib,needed_services,[State#state.application_list]),
 %    io:format("NeededServices ~p~n",[{?MODULE,?LINE,NeededServices}]),
     MissingServices=rpc:call(node(),controller_lib,missing_services,[NeededServices,State#state.dns_list]),
-  %  io:format("MissingServices ~p~n",[{?MODULE,?LINE,MissingServices}]),
+    case MissingServices of
+	[]->
+	    io:format("System is in preferred state  ~p~n",[{date(),time(),MissingServices}]);
+	MissingServices->
+	    io:format("MissingServices ~p~n",[{date(),time(),MissingServices}])
+    end,
     rpc:call(node(),controller_lib,start_services,[MissingServices,State#state.node_list]),
     {noreply, State};
 

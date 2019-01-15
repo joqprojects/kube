@@ -31,16 +31,17 @@ stop_services([],DnsList)->
   %  io:format("ok  ~p~n",[{time(),?MODULE,?LINE,DnsList}]),
     ok;
 stop_services([{ServiceId,Vsn}|T],DnsList)->
- %   io:format("ServiceId,Vsn ~p~n",[{time(),?MODULE,?LINE,ServiceId,Vsn}]),
+ %   io:format("ServiceId,Vsn, Tail ~p~n",[{time(),?MODULE,?LINE,ServiceId,Vsn,'Tail',T}]),
+ %   io:format("DnsList,Vsn ~p~n",[{time(),?MODULE,?LINE,DnsList}]),
     ListWithIp=[{IpAddr,Port,ServiceId,Vsn}||#dns_info{service_id=X_Id,
 							      vsn=X_Vsn,
 							      ip_addr=IpAddr,
 							      port=Port}<-DnsList,
 						    {ServiceId,Vsn}=:={X_Id,X_Vsn}],
-    io:format("ListWithIp,Vsn ~p~n",[{time(),?MODULE,?LINE,ListWithIp}]),
+  %  io:format("ListWithIp,Vsn ~p~n",[{time(),?MODULE,?LINE,ListWithIp}]),
 
-   R= [{IpAddr,Port,ServiceId,Vsn,tcp:call(IpAddr,Port,{kubelet,stop_service,[ServiceId]})}||{IpAddr,Port,ServiceId,Vsn}<-ListWithIp],
-    io:format("result stop_service ~p~n",[{?MODULE,?LINE,R}]),
+   R= [{IpAddr,Port,ServiceId,Vsn,rpc:cast(node(),tcp,call,[IpAddr,Port,{kubelet,stop_service,[ServiceId]}])}||{IpAddr,Port,ServiceId,Vsn}<-ListWithIp],
+  %  io:format("result stop_service ~p~n",[{?MODULE,?LINE,R}]),
 
     stop_services(T,DnsList).
 						  
