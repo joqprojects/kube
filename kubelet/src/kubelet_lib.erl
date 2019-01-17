@@ -11,6 +11,7 @@
 %% --------------------------------------------------------------------
 -include("kube/include/trace_debug.hrl").
 -include("kube/include/kubelet_data.hrl").
+-include("kube/include/dns.hrl").
 -include("kube/include/dns_data.hrl").
 -include("kube/include/repository_data.hrl").
 %% --------------------------------------------------------------------
@@ -60,15 +61,28 @@ load_start_app(ServiceId,VsnInput,NodeIp,NodePort)->
     R=application:start(Module).    
 
 load_start_pre_loaded_apps(PreLoadApps,NodeIp,NodePort)->
-  %  io:format("~p~n",[{?MODULE,?LINE,PreLoadApps}]),
+   % io:format("~p~n",[{?MODULE,?LINE,PreLoadApps}]),
     load_start_apps(PreLoadApps,NodeIp,NodePort,[]).
 load_start_apps([],_,_,StartResult)->
     StartResult;
+load_start_apps([catalog|T],NodeIp,NodePort,Acc) -> %Has to be pre loaded
+    ok=application:set_env(catalog,ip_addr,NodeIp),
+    ok=application:set_env(catalog,port,NodePort),
+    ok=application:set_env(catalog,service_id,"catalog"),
+    EbinDir=?KUBELET_EBIN,
+    Appfile=filename:join(EbinDir,"catalog.app"),
+    {ok,[{application,_,Info}]}=file:consult(Appfile),
+    {vsn,Vsn}=lists:keyfind(vsn,1,Info),
+    ok=application:set_env(catalog,vsn,Vsn),
+    R=application:start(catalog),
+    NewAcc=[{"catalog",Vsn,R}|Acc],
+    load_start_apps(T,NodeIp,NodePort,NewAcc);
+
 load_start_apps([repo|T],NodeIp,NodePort,Acc) -> %Has to be pre loaded
     ok=application:set_env(repo,ip_addr,NodeIp),
     ok=application:set_env(repo,port,NodePort),
     ok=application:set_env(repo,service_id,"repo"),
-    EbinDir=?SERVICE_EBIN,
+    EbinDir=?KUBELET_EBIN,
     Appfile=filename:join(EbinDir,"repo.app"),
     {ok,[{application,_,Info}]}=file:consult(Appfile),
     {vsn,Vsn}=lists:keyfind(vsn,1,Info),
@@ -81,7 +95,7 @@ load_start_apps([dns|T],NodeIp,NodePort,Acc) -> %Has to be pre loaded
     ok=application:set_env(dns,ip_addr,NodeIp),
     ok=application:set_env(dns,port,NodePort),
     ok=application:set_env(dns,service_id,"dns"),
-    EbinDir=?SERVICE_EBIN,
+    EbinDir=?KUBELET_EBIN,
     Appfile=filename:join(EbinDir,"dns.app"),
     {ok,[{application,_,Info}]}=file:consult(Appfile),
     {vsn,Vsn}=lists:keyfind(vsn,1,Info),
@@ -122,6 +136,12 @@ stop_unload_app(DnsInfo)->
 	     "lib"->
 		 "lib_ebin";
 	     "kubelet"->
+		 "kubelet_ebin";
+	     "repo"->
+		 "kubelet_ebin";
+	     "catalog"->
+		 "kubelet_ebin";
+	     "controller"->
 		 "kubelet_ebin";
 	     _->
 		 ?SERVICE_EBIN
@@ -181,6 +201,12 @@ load_appfiles(ServiceId,VsnInput,NodeIp,NodePort)->  % VsnInput Can be latest !!
 		 "lib_ebin";
 	     "kubelet"->
 		 "kubelet_ebin";
+	     "repo"->
+		 "kubelet_ebin";
+	     "catalog"->
+		 "kubelet_ebin";
+	     "controller"->
+		 "kubelet_ebin";
 	     _->
 		 ?SERVICE_EBIN
 	 end,
@@ -234,3 +260,9 @@ update_modules([Module|T]) ->
     update_modules(T).
 
 
+start_app(App,Vsn)->
+    ok=application:set_env(App,ip_addr,?DNS_IP),
+    ok=application:set_env(App,port,?DNS_PORT),
+    ok=application:set_env(App,service_id,atom_to_list(App)),
+    ok=application:set_env(App,vsn,Vsn),
+    R=application:start(App). 

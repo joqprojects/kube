@@ -96,6 +96,7 @@ heart_beat()->
 %%          {stop, Reason}
 %% --------------------------------------------------------------------
 init([]) ->
+   % os:cmd("rm service_ebin/*"),
     {ok,InitialInfo}=file:consult("kubelet.config"),
     {ip_addr,NodeIp}=lists:keyfind(ip_addr,1,InitialInfo),
     {port,NodePort}=lists:keyfind(port,1,InitialInfo),
@@ -114,9 +115,15 @@ init([]) ->
 			zone=Zone,
 			capabilities=Capabilities
 		       },    
+
+ %   
+ %   rpc:call(node(),kubelet_lib,start_app,[dns,"1.0.0"]),
+   io:format("NodeIp,NodePort Port  ~p~n",[{?MODULE,?LINE,PreLoadApps,NodeIp,NodePort}]),
     _Result=rpc:call(node(),kubelet_lib,load_start_pre_loaded_apps,[PreLoadApps,NodeIp,NodePort]),
   %  StartedApps=[{ServiceId_X,Vsn_X}||{ServiceId_X,Vsn_X,ok}<-Result],
+     io:format("Port  ~p~n",[{?MODULE,?LINE,NodePort}]),
     {ok, LSock} = gen_tcp:listen(NodePort,?SERVER_SETUP),
+    timer:sleep(100),
     Workers=init_workers(LSock,MaxWorkers,[]), % Glurk remove?
 
     %------ send info to controller
@@ -124,8 +131,10 @@ init([]) ->
     SenderInfo=#sender_info{ip_addr=NodeIp,
 			    port=NodePort,
 			    module=?MODULE,line=?LINE},
-    if_dns:call("controller",controller,node_register,[KubeletInfo],SenderInfo),
+    io:format("  ~p~n",[{?MODULE,?LINE}]),
+    rpc:cast(node(),if_dns,call,["controller",controller,node_register,[KubeletInfo],SenderInfo]),
     spawn(fun()-> local_heart_beat(?HEARTBEAT_INTERVAL) end), 
+
     io:format("Started Service  ~p~n",[{?MODULE}]),
     {ok, #state{kubelet_info=KubeletInfo,
 		lSock=LSock,max_workers=MaxWorkers,

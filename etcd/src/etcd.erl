@@ -156,7 +156,7 @@ read_service_app_file(ServiceId,Vsn)->
 %% --------------------------------------------------------------------
 init([ServiceInfo]) ->
     Type=set,
-    DbaseId="etcd.dbase",
+    DbaseId="storage/etcd.dbase",
     case dbase_dets:create_dbase(Type,DbaseId) of
 	{ok,dbase_already_exsist}->
 	    ok;
@@ -393,7 +393,7 @@ code_change(_OldVsn, State, _Extra) ->
 local_heart_beat(Interval)->
 %    io:format(" ~p~n",[{?MODULE,?LINE}]),
     timer:sleep(Interval),
-    repo:heart_beat(),
+    ?MODULE:heart_beat(),
     spawn(fun()-> local_heart_beat(Interval) end).
 %% --------------------------------------------------------------------
 %% Function: 

@@ -81,9 +81,9 @@ heart_beat()->
 %%          {stop, Reason}
 %% --------------------------------------------------------------------
 init([]) ->
-    file:delete("glurk_catalog.dbase"),   
+    ok=file:delete("storage/glurk_catalog.dbase"),   
     Type=set,
-    DbaseId="glurk_catalog.dbase",
+    DbaseId="storage/glurk_catalog.dbase",
     dbase_dets:create_dbase(Type,DbaseId),
 %--- just for test'    
     init_glurk([{"adder","../../ebin/adder_100/ebin"},
@@ -100,19 +100,24 @@ init([]) ->
 	       ],
 	      DbaseId),
 %----
+    io:format("~p~n",[{?MODULE,?LINE}]),
     {ok,MyIp}=application:get_env(ip_addr),
     {ok,Port}=application:get_env(port),
     {ok,ServiceId}=application:get_env(service_id),
     {ok,Vsn}=application:get_env(vsn),
-    MyDnsInfo=#dns_info{time_stamp="not_initiaded_time_stamp",
+    DnsInfo=#dns_info{time_stamp="not_initiaded_time_stamp",
 			service_id = ServiceId,
 			vsn = Vsn,
 			ip_addr=MyIp,
 			port=Port
 		       },
+ %   io:format("~p~n",[{?MODULE,?LINE,DnsInfo}]),
+    rpc:cast(node(),if_dns,call,["dns",dns,dns_register,[DnsInfo]]),
+    rpc:cast(node(),if_dns,call,["controller",controller,dns_register,[DnsInfo]]),
+    rpc:cast(node(),kubelet,dns_register,[DnsInfo]),
     spawn(fun()-> local_heart_beat(?HEARTBEAT_INTERVAL) end), 
     io:format("~p~n",[{?MODULE,'  started ', ?LINE}]),
-    {ok, #state{dns_info=MyDnsInfo,dbase_id=DbaseId}}. 
+    {ok, #state{dns_info=DnsInfo,dbase_id=DbaseId}}. 
 
 %% --------------------------------------------------------------------
 %% Function: handle_call/3
@@ -147,7 +152,9 @@ handle_call({delete,Name,Vsn}, _From, State) ->
 
 handle_call({heart_beat}, _From, State) ->
     DnsInfo=State#state.dns_info,
-    if_dns:call("dns",dns,dns_register,[DnsInfo]),
+  %  io:format(" ~p~n",[{?MODULE,?LINE,DnsInfo}]),
+    rpc:cast(node(),if_dns,call,["dns",dns,dns_register,[DnsInfo]]),
+    rpc:cast(node(),if_dns,call,["controller",controller,dns_register,[DnsInfo]]),
     rpc:cast(node(),kubelet,dns_register,[DnsInfo]),
    % if_dns:call("contoller",controller,controller_register,[DnsInfo]),
     Reply=ok,
@@ -218,6 +225,7 @@ init_glurk([],_)->
     ok;
 init_glurk([{ServiceId,Ebin}|T],DbaseId)->
     BaseName=ServiceId++".josca",
+   io:format("~p~n",[{?MODULE,?LINE,BaseName}]),
     FileName=filename:join(Ebin,BaseName),
     {ok,JoscaInfo}=file:consult(FileName),
     {vsn,Vsn}=lists:keyfind(vsn,1,JoscaInfo),

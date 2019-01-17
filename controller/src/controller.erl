@@ -230,7 +230,7 @@ handle_call({all_nodes},_From, State) ->
 %% --------------------------------------------------------------------
 
 handle_call({heart_beat}, _From, State) ->
-    if_dns:call("dns",dns,dns_register,[State#state.dns_info]),
+    rpc:cast(node(),if_dns,call,["dns",dns,dns_register,[State#state.dns_info]]),
     rpc:call(node(),kubelet,dns_register,[State#state.dns_info]),
     Now=erlang:now(),
     NewDnsList=[DnsInfo||DnsInfo<-State#state.dns_list,
@@ -241,7 +241,7 @@ handle_call({heart_beat}, _From, State) ->
     
     NewState=State#state{dns_list=NewDnsList,node_list=NewNodeList},
   %  io:format(" ~p~n",[{time(),'before campaign',?MODULE,?LINE}]),
-    rpc:call(node(),controller,campaign,[]),
+    rpc:cast(node(),controller,campaign,[]),
    % io:format(" ~p~n",[{time(),'after campaign',?MODULE,?LINE}]),   
 Reply=ok,
    {reply, Reply,NewState};

@@ -75,9 +75,9 @@ heart_beat()->
 %%          {stop, Reason}
 %% --------------------------------------------------------------------
 init([]) ->
-    file:delete("glurk.dbase"),   
+    file:delete("storage/glurk.dbase"),   
     Type=set,
-    DbaseId="glurk.dbase",
+    DbaseId="storage/glurk.dbase",
     dbase_dets:create_dbase(Type,DbaseId),
 %--- just for test'    
     init_glurk([{"adder","../../ebin/adder_100/ebin"},
@@ -94,15 +94,18 @@ init([]) ->
     {ok,Port}=application:get_env(port),
     {ok,ServiceId}=application:get_env(service_id),
     {ok,Vsn}=application:get_env(vsn),
-    MyDnsInfo=#dns_info{time_stamp="not_initiaded_time_stamp",
+    DnsInfo=#dns_info{time_stamp="not_initiaded_time_stamp",
 			service_id = ServiceId,
 			vsn = Vsn,
 			ip_addr=MyIp,
 			port=Port
 		       },
+    rpc:cast(node(),if_dns,call,["dns",dns,dns_register,[DnsInfo]]),
+    rpc:cast(node(),if_dns,call,["controller",controller,dns_register,[DnsInfo]]),
+    rpc:cast(node(),kubelet,dns_register,[DnsInfo]),
     spawn(fun()-> local_heart_beat(?HEARTBEAT_INTERVAL) end), 
     io:format("~p~n",[{?MODULE,'  started ', ?LINE}]),
-    {ok, #state{dns_info=MyDnsInfo,dbase_id=DbaseId}}. 
+    {ok, #state{dns_info=DnsInfo,dbase_id=DbaseId}}. 
 
 %% --------------------------------------------------------------------
 %% Function: handle_call/3
@@ -131,7 +134,7 @@ handle_call({read_artifact,ServiceId,Vsn}, _From, State) ->
 
 handle_call({heart_beat}, _From, State) ->
     DnsInfo=State#state.dns_info,
-    if_dns:call("dns",dns,dns_register,[DnsInfo]),
+     rpc:cast(node(),if_dns,call,["dns",dns,dns_register,[State#state.dns_info]]),
     rpc:cast(node(),kubelet,dns_register,[DnsInfo]),
    % if_dns:call("contoller",controller,controller_register,[DnsInfo]),
     Reply=ok,
@@ -204,7 +207,7 @@ init_glurk([{ServiceId,Ebin}|T])->
    io:format(" ~p~n",[{?MODULE,?LINE,ServiceId,Ebin}]),
     case repo_lib:build_artifact(ServiceId,Ebin) of
 	{ok,Artifact}->
-	    case repo_lib:update_artifact(Artifact,"glurk.dbase") of
+	    case repo_lib:update_artifact(Artifact,"storage/glurk.dbase") of
 		{ok,artifact_updated}->
 		    ok;
 		Err->
